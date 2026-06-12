@@ -1,0 +1,2593 @@
+
+
+====================
+FILE: .\merge.py
+====================
+import os
+
+# 제외할 폴더
+exclude_dirs = ['.git', '__pycache__', 'venv', 'node_modules', '.streamlit']
+# 포함할 확장자
+# 수정된 필터 설정 (프론트엔드 파일 포함)
+include_exts = ['.py', '.yaml', '.toml', '.txt', '.vue', '.js', '.json']
+
+with open('total_code.txt', 'w', encoding='utf-8') as outfile:
+    for root, dirs, files in os.walk('.'):
+        dirs[:] = [d for d in dirs if d not in exclude_dirs]
+        for file in files:
+            if any(file.endswith(ext) for ext in include_exts):
+                file_path = os.path.join(root, file)
+                outfile.write(f"\n\n{'='*20}\nFILE: {file_path}\n{'='*20}\n")
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as infile:
+                        outfile.write(infile.read())
+                except:
+                    outfile.write("// [파일을 읽을 수 없습니다]\n")
+
+====================
+FILE: .\total_code.txt
+====================
+
+
+====================
+FILE: .\backend\app.py
+====================
+from flask import Flask, jsonify, request
+from flask_cors import CORS
+from apscheduler.schedulers.background import BackgroundScheduler
+import json, os, uuid, requests as req
+from datetime import datetime, date, timedelta
+
+app = Flask(__name__)
+CORS(app)
+
+DATA_DIR      = os.path.join(os.path.dirname(__file__), 'data')
+PROJECTS_FILE = os.path.join(DATA_DIR, 'projects.json')
+TASKS_DIR     = os.path.join(DATA_DIR, 'tasks')
+WEBHOOK_FILE  = os.path.join(DATA_DIR, 'webhook.json')
+LOGS_FILE     = os.path.join(DATA_DIR, 'logs.json')
+
+# ── helpers ──────────────────────────────────────────────
+def read_json(path, default):
+    if os.path.exists(path):
+        with open(path, encoding='utf-8') as f:
+            return json.load(f)
+    return default
+
+def write_json(path, data):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+def tasks_path(project_id):
+    return os.path.join(TASKS_DIR, f'{project_id}.json')
+
+def diff_days(end_str):
+    try:
+        return (datetime.strptime(end_str, '%Y-%m-%d').date() - date.today()).days
+    except:
+        return None
+
+def get_status(task):
+    p = int(task.get('progress', 0))
+    d = diff_days(task.get('endDate', ''))
+    if p >= 100:   return 'done'
+    if d is None:  return 'pending'
+    if d < 0:      return 'overdue'
+    if d <= 7:     return 'risk'
+    if p > 0:      return 'progress'
+    return 'pending'
+
+def calc_project_stats(project_id):
+    tasks = read_json(tasks_path(project_id), [])
+    total = len(tasks)
+    if total == 0:
+        return {'total': 0, 'progress': 0, 'status': 'pending'}
+    done  = sum(1 for t in tasks if get_status(t) == 'done')
+    over  = any(get_status(t) == 'overdue' for t in tasks)
+    risk  = any(get_status(t) == 'risk'    for t in tasks)
+    prog  = round(sum(int(t.get('progress', 0)) for t in tasks) / total)
+    if over:  status = 'overdue'
+    elif risk: status = 'risk'
+    elif done == total: status = 'done'
+    elif done > 0 or prog > 0: status = 'progress'
+    else: status = 'pending'
+    return {'total': total, 'progress': prog, 'status': status}
+
+def add_log(log_type, title, detail):
+    logs = read_json(LOGS_FILE, [])
+    logs.insert(0, {'type': log_type, 'title': title, 'detail': detail,
+                    'time': datetime.now().strftime('%Y-%m-%d %H:%M')})
+    write_json(LOGS_FILE, logs[:50])
+
+def build_message(task, project_name, trigger):
+    emoji = {'done':'✅','progress':'🔵','risk':'⚠️','overdue':'🚨','pending':'⏳'}
+    s = get_status(task)
+    return (f"{emoji.get(s,'📋')} *[WBS 알림]* {trigger}\n\n"
+            f"📁 프로젝트: {project_name}\n"
+            f"📌 태스크: {task.get('task','')}\n"
+            f"👤 담당자: {task.get('assignee','미지정')}\n"
+            f"📂 그룹: {task.get('group','')}\n"
+            f"📅 마감일: {task.get('endDate','')}\n"
+            f"📊 진행률: {task.get('progress',0)}%")
+
+def send_webhook(text):
+    wh = read_json(WEBHOOK_FILE, {})
+    if not wh.get('type'):
+        return False, '웹훅 설정 없음'
+    try:
+        if wh['type'] == 'telegram':
+            token, chat = wh.get('token',''), wh.get('chat','')
+            if not token or not chat:
+                return False, 'Token/Chat ID 없음'
+            r = req.post(f"https://api.telegram.org/bot{token}/sendMessage",
+                         json={'chat_id': chat, 'text': text, 'parse_mode': 'Markdown'}, timeout=10)
+        else:
+            url = wh.get('url','')
+            if not url: return False, 'Webhook URL 없음'
+            r = req.post(url, json={'text': text}, timeout=10)
+        return r.ok, r.text
+    except Exception as e:
+        return False, str(e)
+
+# ── scheduler ─────────────────────────────────────────────
+def daily_check():
+    if not read_json(WEBHOOK_FILE, {}).get('type'):
+        return
+    projects = read_json(PROJECTS_FILE, [])
+    for proj in projects:
+        tasks = read_json(tasks_path(proj['id']), [])
+        for t in tasks:
+            if int(t.get('progress', 0)) >= 100: continue
+            d = diff_days(t.get('endDate', ''))
+            if d is None: continue
+            if d == 7:
+                ok, _ = send_webhook(build_message(t, proj['name'], 'D-7 마감 7일 전'))
+                add_log('warning' if ok else 'error', f"D-7 {t['task']}", proj['name'])
+            elif d == 1:
+                ok, _ = send_webhook(build_message(t, proj['name'], '⚡ D-1 내일 마감'))
+                add_log('warning' if ok else 'error', f"D-1 긴급 {t['task']}", proj['name'])
+            elif d < 0:
+                ok, _ = send_webhook(build_message(t, proj['name'], f'🚨 {abs(d)}일 초과 지연'))
+                add_log('error', f"지연 {t['task']}", f"{proj['name']} · {abs(d)}일 초과")
+
+scheduler = BackgroundScheduler()
+scheduler.add_job(daily_check, 'cron', hour=9, minute=0)
+scheduler.start()
+
+# ── projects ──────────────────────────────────────────────
+@app.route('/api/projects', methods=['GET'])
+def get_projects():
+    projects = read_json(PROJECTS_FILE, [])
+    result = []
+    for p in projects:
+        stats = calc_project_stats(p['id'])
+        result.append({**p, **stats})
+    return jsonify(result)
+
+@app.route('/api/projects', methods=['POST'])
+def create_project():
+    projects = read_json(PROJECTS_FILE, [])
+    proj = request.json
+    proj['id']        = str(uuid.uuid4())[:8]
+    proj['createdAt'] = datetime.now().strftime('%Y-%m-%d')
+    projects.append(proj)
+    write_json(PROJECTS_FILE, projects)
+    write_json(tasks_path(proj['id']), [])
+    return jsonify(proj), 201
+
+@app.route('/api/projects/<pid>', methods=['GET'])
+def get_project(pid):
+    projects = read_json(PROJECTS_FILE, [])
+    proj = next((p for p in projects if p['id'] == pid), None)
+    if not proj: return jsonify({'error': 'not found'}), 404
+    stats = calc_project_stats(pid)
+    return jsonify({**proj, **stats})
+
+@app.route('/api/projects/<pid>', methods=['PUT'])
+def update_project(pid):
+    projects = read_json(PROJECTS_FILE, [])
+    for i, p in enumerate(projects):
+        if p['id'] == pid:
+            projects[i] = {**p, **request.json, 'id': pid}
+            write_json(PROJECTS_FILE, projects)
+            return jsonify(projects[i])
+    return jsonify({'error': 'not found'}), 404
+
+@app.route('/api/projects/<pid>', methods=['DELETE'])
+def delete_project(pid):
+    projects = [p for p in read_json(PROJECTS_FILE, []) if p['id'] != pid]
+    write_json(PROJECTS_FILE, projects)
+    tf = tasks_path(pid)
+    if os.path.exists(tf): os.remove(tf)
+    return jsonify({'ok': True})
+
+# ── tasks ─────────────────────────────────────────────────
+@app.route('/api/projects/<pid>/tasks', methods=['GET'])
+def get_tasks(pid):
+    return jsonify(read_json(tasks_path(pid), []))
+
+@app.route('/api/projects/<pid>/tasks', methods=['POST'])
+def create_task(pid):
+    tasks = read_json(tasks_path(pid), [])
+    task  = {**request.json, 'id': str(uuid.uuid4())[:8]}
+    tasks.append(task)
+    write_json(tasks_path(pid), tasks)
+    return jsonify(task), 201
+
+@app.route('/api/projects/<pid>/tasks/<tid>', methods=['PUT'])
+def update_task(pid, tid):
+    tasks = read_json(tasks_path(pid), [])
+    for i, t in enumerate(tasks):
+        if t['id'] == tid:
+            tasks[i] = {**t, **request.json, 'id': tid}
+            write_json(tasks_path(pid), tasks)
+            return jsonify(tasks[i])
+    return jsonify({'error': 'not found'}), 404
+
+@app.route('/api/projects/<pid>/tasks/<tid>', methods=['DELETE'])
+def delete_task(pid, tid):
+    tasks = [t for t in read_json(tasks_path(pid), []) if t['id'] != tid]
+    write_json(tasks_path(pid), tasks)
+    return jsonify({'ok': True})
+
+# ── webhook / logs ────────────────────────────────────────
+@app.route('/api/webhook', methods=['GET'])
+def get_webhook():
+    wh = read_json(WEBHOOK_FILE, {})
+    return jsonify({**wh, 'token': '***' if wh.get('token') else ''})
+
+@app.route('/api/webhook', methods=['POST'])
+def save_webhook():
+    write_json(WEBHOOK_FILE, request.json)
+    return jsonify({'ok': True})
+
+@app.route('/api/webhook/test', methods=['POST'])
+def test_webhook():
+    dummy = {'task':'[테스트] WBS Manager 연동 확인','group':'QA',
+             'assignee':'담당자1','endDate':str(date.today()+timedelta(days=3)),'progress':0}
+    ok, msg = send_webhook(build_message(dummy, 'Test Project', '테스트 메시지'))
+    add_log('success' if ok else 'error', '테스트 전송', '성공' if ok else msg)
+    return jsonify({'ok': ok, 'message': '전송 성공' if ok else msg})
+
+@app.route('/api/logs', methods=['GET'])
+def get_logs():
+    return jsonify(read_json(LOGS_FILE, []))
+
+@app.route('/api/notify/now', methods=['POST'])
+def notify_now():
+    daily_check()
+    return jsonify({'ok': True})
+
+if __name__ == '__main__':
+    app.run(debug=True, port=5000)
+
+
+====================
+FILE: .\backend\requirements.txt
+====================
+flask==3.0.3
+flask-cors==4.0.1
+requests==2.32.3
+apscheduler==3.10.4
+
+
+====================
+FILE: .\backend\data\projects.json
+====================
+[
+  {
+    "name": "테스트",
+    "description": "ㅎㅎㅎ",
+    "pm": "",
+    "endDate": "2026-05-30",
+    "id": "3a4080f7",
+    "createdAt": "2026-04-14"
+  }
+]
+
+====================
+FILE: .\backend\data\tasks\3a4080f7.json
+====================
+[]
+
+====================
+FILE: .\frontend\package-lock.json
+====================
+{
+  "name": "wbs-release-manager",
+  "version": "2.0.0",
+  "lockfileVersion": 3,
+  "requires": true,
+  "packages": {
+    "": {
+      "name": "wbs-release-manager",
+      "version": "2.0.0",
+      "dependencies": {
+        "vue": "^3.4.0"
+      },
+      "devDependencies": {
+        "@vitejs/plugin-vue": "^5.0.0",
+        "vite": "^5.0.0"
+      }
+    },
+    "node_modules/@babel/helper-string-parser": {
+      "version": "7.27.1",
+      "resolved": "https://registry.npmjs.org/@babel/helper-string-parser/-/helper-string-parser-7.27.1.tgz",
+      "integrity": "sha512-qMlSxKbpRlAridDExk92nSobyDdpPijUq2DW6oDnUqd0iOGxmQjyqhMIihI9+zv4LPyZdRje2cavWPbCbWm3eA==",
+      "license": "MIT",
+      "engines": {
+        "node": ">=6.9.0"
+      }
+    },
+    "node_modules/@babel/helper-validator-identifier": {
+      "version": "7.28.5",
+      "resolved": "https://registry.npmjs.org/@babel/helper-validator-identifier/-/helper-validator-identifier-7.28.5.tgz",
+      "integrity": "sha512-qSs4ifwzKJSV39ucNjsvc6WVHs6b7S03sOh2OcHF9UHfVPqWWALUsNUVzhSBiItjRZoLHx7nIarVjqKVusUZ1Q==",
+      "license": "MIT",
+      "engines": {
+        "node": ">=6.9.0"
+      }
+    },
+    "node_modules/@babel/parser": {
+      "version": "7.29.2",
+      "resolved": "https://registry.npmjs.org/@babel/parser/-/parser-7.29.2.tgz",
+      "integrity": "sha512-4GgRzy/+fsBa72/RZVJmGKPmZu9Byn8o4MoLpmNe1m8ZfYnz5emHLQz3U4gLud6Zwl0RZIcgiLD7Uq7ySFuDLA==",
+      "license": "MIT",
+      "dependencies": {
+        "@babel/types": "^7.29.0"
+      },
+      "bin": {
+        "parser": "bin/babel-parser.js"
+      },
+      "engines": {
+        "node": ">=6.0.0"
+      }
+    },
+    "node_modules/@babel/types": {
+      "version": "7.29.0",
+      "resolved": "https://registry.npmjs.org/@babel/types/-/types-7.29.0.tgz",
+      "integrity": "sha512-LwdZHpScM4Qz8Xw2iKSzS+cfglZzJGvofQICy7W7v4caru4EaAmyUuO6BGrbyQ2mYV11W0U8j5mBhd14dd3B0A==",
+      "license": "MIT",
+      "dependencies": {
+        "@babel/helper-string-parser": "^7.27.1",
+        "@babel/helper-validator-identifier": "^7.28.5"
+      },
+      "engines": {
+        "node": ">=6.9.0"
+      }
+    },
+    "node_modules/@esbuild/aix-ppc64": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/aix-ppc64/-/aix-ppc64-0.21.5.tgz",
+      "integrity": "sha512-1SDgH6ZSPTlggy1yI6+Dbkiz8xzpHJEVAlF/AM1tHPLsf5STom9rwtjE4hKAF20FfXXNTFqEYXyJNWh1GiZedQ==",
+      "cpu": [
+        "ppc64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "aix"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/android-arm": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/android-arm/-/android-arm-0.21.5.tgz",
+      "integrity": "sha512-vCPvzSjpPHEi1siZdlvAlsPxXl7WbOVUBBAowWug4rJHb68Ox8KualB+1ocNvT5fjv6wpkX6o/iEpbDrf68zcg==",
+      "cpu": [
+        "arm"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "android"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/android-arm64": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/android-arm64/-/android-arm64-0.21.5.tgz",
+      "integrity": "sha512-c0uX9VAUBQ7dTDCjq+wdyGLowMdtR/GoC2U5IYk/7D1H1JYC0qseD7+11iMP2mRLN9RcCMRcjC4YMclCzGwS/A==",
+      "cpu": [
+        "arm64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "android"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/android-x64": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/android-x64/-/android-x64-0.21.5.tgz",
+      "integrity": "sha512-D7aPRUUNHRBwHxzxRvp856rjUHRFW1SdQATKXH2hqA0kAZb1hKmi02OpYRacl0TxIGz/ZmXWlbZgjwWYaCakTA==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "android"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/darwin-arm64": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/darwin-arm64/-/darwin-arm64-0.21.5.tgz",
+      "integrity": "sha512-DwqXqZyuk5AiWWf3UfLiRDJ5EDd49zg6O9wclZ7kUMv2WRFr4HKjXp/5t8JZ11QbQfUS6/cRCKGwYhtNAY88kQ==",
+      "cpu": [
+        "arm64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "darwin"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/darwin-x64": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/darwin-x64/-/darwin-x64-0.21.5.tgz",
+      "integrity": "sha512-se/JjF8NlmKVG4kNIuyWMV/22ZaerB+qaSi5MdrXtd6R08kvs2qCN4C09miupktDitvh8jRFflwGFBQcxZRjbw==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "darwin"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/freebsd-arm64": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/freebsd-arm64/-/freebsd-arm64-0.21.5.tgz",
+      "integrity": "sha512-5JcRxxRDUJLX8JXp/wcBCy3pENnCgBR9bN6JsY4OmhfUtIHe3ZW0mawA7+RDAcMLrMIZaf03NlQiX9DGyB8h4g==",
+      "cpu": [
+        "arm64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "freebsd"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/freebsd-x64": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/freebsd-x64/-/freebsd-x64-0.21.5.tgz",
+      "integrity": "sha512-J95kNBj1zkbMXtHVH29bBriQygMXqoVQOQYA+ISs0/2l3T9/kj42ow2mpqerRBxDJnmkUDCaQT/dfNXWX/ZZCQ==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "freebsd"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/linux-arm": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/linux-arm/-/linux-arm-0.21.5.tgz",
+      "integrity": "sha512-bPb5AHZtbeNGjCKVZ9UGqGwo8EUu4cLq68E95A53KlxAPRmUyYv2D6F0uUI65XisGOL1hBP5mTronbgo+0bFcA==",
+      "cpu": [
+        "arm"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/linux-arm64": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/linux-arm64/-/linux-arm64-0.21.5.tgz",
+      "integrity": "sha512-ibKvmyYzKsBeX8d8I7MH/TMfWDXBF3db4qM6sy+7re0YXya+K1cem3on9XgdT2EQGMu4hQyZhan7TeQ8XkGp4Q==",
+      "cpu": [
+        "arm64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/linux-ia32": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/linux-ia32/-/linux-ia32-0.21.5.tgz",
+      "integrity": "sha512-YvjXDqLRqPDl2dvRODYmmhz4rPeVKYvppfGYKSNGdyZkA01046pLWyRKKI3ax8fbJoK5QbxblURkwK/MWY18Tg==",
+      "cpu": [
+        "ia32"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/linux-loong64": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/linux-loong64/-/linux-loong64-0.21.5.tgz",
+      "integrity": "sha512-uHf1BmMG8qEvzdrzAqg2SIG/02+4/DHB6a9Kbya0XDvwDEKCoC8ZRWI5JJvNdUjtciBGFQ5PuBlpEOXQj+JQSg==",
+      "cpu": [
+        "loong64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/linux-mips64el": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/linux-mips64el/-/linux-mips64el-0.21.5.tgz",
+      "integrity": "sha512-IajOmO+KJK23bj52dFSNCMsz1QP1DqM6cwLUv3W1QwyxkyIWecfafnI555fvSGqEKwjMXVLokcV5ygHW5b3Jbg==",
+      "cpu": [
+        "mips64el"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/linux-ppc64": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/linux-ppc64/-/linux-ppc64-0.21.5.tgz",
+      "integrity": "sha512-1hHV/Z4OEfMwpLO8rp7CvlhBDnjsC3CttJXIhBi+5Aj5r+MBvy4egg7wCbe//hSsT+RvDAG7s81tAvpL2XAE4w==",
+      "cpu": [
+        "ppc64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/linux-riscv64": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/linux-riscv64/-/linux-riscv64-0.21.5.tgz",
+      "integrity": "sha512-2HdXDMd9GMgTGrPWnJzP2ALSokE/0O5HhTUvWIbD3YdjME8JwvSCnNGBnTThKGEB91OZhzrJ4qIIxk/SBmyDDA==",
+      "cpu": [
+        "riscv64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/linux-s390x": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/linux-s390x/-/linux-s390x-0.21.5.tgz",
+      "integrity": "sha512-zus5sxzqBJD3eXxwvjN1yQkRepANgxE9lgOW2qLnmr8ikMTphkjgXu1HR01K4FJg8h1kEEDAqDcZQtbrRnB41A==",
+      "cpu": [
+        "s390x"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/linux-x64": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/linux-x64/-/linux-x64-0.21.5.tgz",
+      "integrity": "sha512-1rYdTpyv03iycF1+BhzrzQJCdOuAOtaqHTWJZCWvijKD2N5Xu0TtVC8/+1faWqcP9iBCWOmjmhoH94dH82BxPQ==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/netbsd-x64": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/netbsd-x64/-/netbsd-x64-0.21.5.tgz",
+      "integrity": "sha512-Woi2MXzXjMULccIwMnLciyZH4nCIMpWQAs049KEeMvOcNADVxo0UBIQPfSmxB3CWKedngg7sWZdLvLczpe0tLg==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "netbsd"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/openbsd-x64": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/openbsd-x64/-/openbsd-x64-0.21.5.tgz",
+      "integrity": "sha512-HLNNw99xsvx12lFBUwoT8EVCsSvRNDVxNpjZ7bPn947b8gJPzeHWyNVhFsaerc0n3TsbOINvRP2byTZ5LKezow==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "openbsd"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/sunos-x64": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/sunos-x64/-/sunos-x64-0.21.5.tgz",
+      "integrity": "sha512-6+gjmFpfy0BHU5Tpptkuh8+uw3mnrvgs+dSPQXQOv3ekbordwnzTVEb4qnIvQcYXq6gzkyTnoZ9dZG+D4garKg==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "sunos"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/win32-arm64": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/win32-arm64/-/win32-arm64-0.21.5.tgz",
+      "integrity": "sha512-Z0gOTd75VvXqyq7nsl93zwahcTROgqvuAcYDUr+vOv8uHhNSKROyU961kgtCD1e95IqPKSQKH7tBTslnS3tA8A==",
+      "cpu": [
+        "arm64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "win32"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/win32-ia32": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/win32-ia32/-/win32-ia32-0.21.5.tgz",
+      "integrity": "sha512-SWXFF1CL2RVNMaVs+BBClwtfZSvDgtL//G/smwAc5oVK/UPu2Gu9tIaRgFmYFFKrmg3SyAjSrElf0TiJ1v8fYA==",
+      "cpu": [
+        "ia32"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "win32"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/win32-x64": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/win32-x64/-/win32-x64-0.21.5.tgz",
+      "integrity": "sha512-tQd/1efJuzPC6rCFwEvLtci/xNFcTZknmXs98FYDfGE4wP9ClFV98nyKrzJKVPMhdDnjzLhdUyMX4PsQAPjwIw==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "win32"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@jridgewell/sourcemap-codec": {
+      "version": "1.5.5",
+      "resolved": "https://registry.npmjs.org/@jridgewell/sourcemap-codec/-/sourcemap-codec-1.5.5.tgz",
+      "integrity": "sha512-cYQ9310grqxueWbl+WuIUIaiUaDcj7WOq5fVhEljNVgRfOUhY9fy2zTvfoqWsnebh8Sl70VScFbICvJnLKB0Og==",
+      "license": "MIT"
+    },
+    "node_modules/@rollup/rollup-android-arm-eabi": {
+      "version": "4.60.1",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-android-arm-eabi/-/rollup-android-arm-eabi-4.60.1.tgz",
+      "integrity": "sha512-d6FinEBLdIiK+1uACUttJKfgZREXrF0Qc2SmLII7W2AD8FfiZ9Wjd+rD/iRuf5s5dWrr1GgwXCvPqOuDquOowA==",
+      "cpu": [
+        "arm"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "android"
+      ]
+    },
+    "node_modules/@rollup/rollup-android-arm64": {
+      "version": "4.60.1",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-android-arm64/-/rollup-android-arm64-4.60.1.tgz",
+      "integrity": "sha512-YjG/EwIDvvYI1YvYbHvDz/BYHtkY4ygUIXHnTdLhG+hKIQFBiosfWiACWortsKPKU/+dUwQQCKQM3qrDe8c9BA==",
+      "cpu": [
+        "arm64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "android"
+      ]
+    },
+    "node_modules/@rollup/rollup-darwin-arm64": {
+      "version": "4.60.1",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-darwin-arm64/-/rollup-darwin-arm64-4.60.1.tgz",
+      "integrity": "sha512-mjCpF7GmkRtSJwon+Rq1N8+pI+8l7w5g9Z3vWj4T7abguC4Czwi3Yu/pFaLvA3TTeMVjnu3ctigusqWUfjZzvw==",
+      "cpu": [
+        "arm64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "darwin"
+      ]
+    },
+    "node_modules/@rollup/rollup-darwin-x64": {
+      "version": "4.60.1",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-darwin-x64/-/rollup-darwin-x64-4.60.1.tgz",
+      "integrity": "sha512-haZ7hJ1JT4e9hqkoT9R/19XW2QKqjfJVv+i5AGg57S+nLk9lQnJ1F/eZloRO3o9Scy9CM3wQ9l+dkXtcBgN5Ew==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "darwin"
+      ]
+    },
+    "node_modules/@rollup/rollup-freebsd-arm64": {
+      "version": "4.60.1",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-freebsd-arm64/-/rollup-freebsd-arm64-4.60.1.tgz",
+      "integrity": "sha512-czw90wpQq3ZsAVBlinZjAYTKduOjTywlG7fEeWKUA7oCmpA8xdTkxZZlwNJKWqILlq0wehoZcJYfBvOyhPTQ6w==",
+      "cpu": [
+        "arm64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "freebsd"
+      ]
+    },
+    "node_modules/@rollup/rollup-freebsd-x64": {
+      "version": "4.60.1",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-freebsd-x64/-/rollup-freebsd-x64-4.60.1.tgz",
+      "integrity": "sha512-KVB2rqsxTHuBtfOeySEyzEOB7ltlB/ux38iu2rBQzkjbwRVlkhAGIEDiiYnO2kFOkJp+Z7pUXKyrRRFuFUKt+g==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "freebsd"
+      ]
+    },
+    "node_modules/@rollup/rollup-linux-arm-gnueabihf": {
+      "version": "4.60.1",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-arm-gnueabihf/-/rollup-linux-arm-gnueabihf-4.60.1.tgz",
+      "integrity": "sha512-L+34Qqil+v5uC0zEubW7uByo78WOCIrBvci69E7sFASRl0X7b/MB6Cqd1lky/CtcSVTydWa2WZwFuWexjS5o6g==",
+      "cpu": [
+        "arm"
+      ],
+      "dev": true,
+      "libc": [
+        "glibc"
+      ],
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ]
+    },
+    "node_modules/@rollup/rollup-linux-arm-musleabihf": {
+      "version": "4.60.1",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-arm-musleabihf/-/rollup-linux-arm-musleabihf-4.60.1.tgz",
+      "integrity": "sha512-n83O8rt4v34hgFzlkb1ycniJh7IR5RCIqt6mz1VRJD6pmhRi0CXdmfnLu9dIUS6buzh60IvACM842Ffb3xd6Gg==",
+      "cpu": [
+        "arm"
+      ],
+      "dev": true,
+      "libc": [
+        "musl"
+      ],
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ]
+    },
+    "node_modules/@rollup/rollup-linux-arm64-gnu": {
+      "version": "4.60.1",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-arm64-gnu/-/rollup-linux-arm64-gnu-4.60.1.tgz",
+      "integrity": "sha512-Nql7sTeAzhTAja3QXeAI48+/+GjBJ+QmAH13snn0AJSNL50JsDqotyudHyMbO2RbJkskbMbFJfIJKWA6R1LCJQ==",
+      "cpu": [
+        "arm64"
+      ],
+      "dev": true,
+      "libc": [
+        "glibc"
+      ],
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ]
+    },
+    "node_modules/@rollup/rollup-linux-arm64-musl": {
+      "version": "4.60.1",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-arm64-musl/-/rollup-linux-arm64-musl-4.60.1.tgz",
+      "integrity": "sha512-+pUymDhd0ys9GcKZPPWlFiZ67sTWV5UU6zOJat02M1+PiuSGDziyRuI/pPue3hoUwm2uGfxdL+trT6Z9rxnlMA==",
+      "cpu": [
+        "arm64"
+      ],
+      "dev": true,
+      "libc": [
+        "musl"
+      ],
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ]
+    },
+    "node_modules/@rollup/rollup-linux-loong64-gnu": {
+      "version": "4.60.1",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-loong64-gnu/-/rollup-linux-loong64-gnu-4.60.1.tgz",
+      "integrity": "sha512-VSvgvQeIcsEvY4bKDHEDWcpW4Yw7BtlKG1GUT4FzBUlEKQK0rWHYBqQt6Fm2taXS+1bXvJT6kICu5ZwqKCnvlQ==",
+      "cpu": [
+        "loong64"
+      ],
+      "dev": true,
+      "libc": [
+        "glibc"
+      ],
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ]
+    },
+    "node_modules/@rollup/rollup-linux-loong64-musl": {
+      "version": "4.60.1",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-loong64-musl/-/rollup-linux-loong64-musl-4.60.1.tgz",
+      "integrity": "sha512-4LqhUomJqwe641gsPp6xLfhqWMbQV04KtPp7/dIp0nzPxAkNY1AbwL5W0MQpcalLYk07vaW9Kp1PBhdpZYYcEw==",
+      "cpu": [
+        "loong64"
+      ],
+      "dev": true,
+      "libc": [
+        "musl"
+      ],
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ]
+    },
+    "node_modules/@rollup/rollup-linux-ppc64-gnu": {
+      "version": "4.60.1",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-ppc64-gnu/-/rollup-linux-ppc64-gnu-4.60.1.tgz",
+      "integrity": "sha512-tLQQ9aPvkBxOc/EUT6j3pyeMD6Hb8QF2BTBnCQWP/uu1lhc9AIrIjKnLYMEroIz/JvtGYgI9dF3AxHZNaEH0rw==",
+      "cpu": [
+        "ppc64"
+      ],
+      "dev": true,
+      "libc": [
+        "glibc"
+      ],
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ]
+    },
+    "node_modules/@rollup/rollup-linux-ppc64-musl": {
+      "version": "4.60.1",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-ppc64-musl/-/rollup-linux-ppc64-musl-4.60.1.tgz",
+      "integrity": "sha512-RMxFhJwc9fSXP6PqmAz4cbv3kAyvD1etJFjTx4ONqFP9DkTkXsAMU4v3Vyc5BgzC+anz7nS/9tp4obsKfqkDHg==",
+      "cpu": [
+        "ppc64"
+      ],
+      "dev": true,
+      "libc": [
+        "musl"
+      ],
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ]
+    },
+    "node_modules/@rollup/rollup-linux-riscv64-gnu": {
+      "version": "4.60.1",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-riscv64-gnu/-/rollup-linux-riscv64-gnu-4.60.1.tgz",
+      "integrity": "sha512-QKgFl+Yc1eEk6MmOBfRHYF6lTxiiiV3/z/BRrbSiW2I7AFTXoBFvdMEyglohPj//2mZS4hDOqeB0H1ACh3sBbg==",
+      "cpu": [
+        "riscv64"
+      ],
+      "dev": true,
+      "libc": [
+        "glibc"
+      ],
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ]
+    },
+    "node_modules/@rollup/rollup-linux-riscv64-musl": {
+      "version": "4.60.1",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-riscv64-musl/-/rollup-linux-riscv64-musl-4.60.1.tgz",
+      "integrity": "sha512-RAjXjP/8c6ZtzatZcA1RaQr6O1TRhzC+adn8YZDnChliZHviqIjmvFwHcxi4JKPSDAt6Uhf/7vqcBzQJy0PDJg==",
+      "cpu": [
+        "riscv64"
+      ],
+      "dev": true,
+      "libc": [
+        "musl"
+      ],
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ]
+    },
+    "node_modules/@rollup/rollup-linux-s390x-gnu": {
+      "version": "4.60.1",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-s390x-gnu/-/rollup-linux-s390x-gnu-4.60.1.tgz",
+      "integrity": "sha512-wcuocpaOlaL1COBYiA89O6yfjlp3RwKDeTIA0hM7OpmhR1Bjo9j31G1uQVpDlTvwxGn2nQs65fBFL5UFd76FcQ==",
+      "cpu": [
+        "s390x"
+      ],
+      "dev": true,
+      "libc": [
+        "glibc"
+      ],
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ]
+    },
+    "node_modules/@rollup/rollup-linux-x64-gnu": {
+      "version": "4.60.1",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-x64-gnu/-/rollup-linux-x64-gnu-4.60.1.tgz",
+      "integrity": "sha512-77PpsFQUCOiZR9+LQEFg9GClyfkNXj1MP6wRnzYs0EeWbPcHs02AXu4xuUbM1zhwn3wqaizle3AEYg5aeoohhg==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "libc": [
+        "glibc"
+      ],
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ]
+    },
+    "node_modules/@rollup/rollup-linux-x64-musl": {
+      "version": "4.60.1",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-x64-musl/-/rollup-linux-x64-musl-4.60.1.tgz",
+      "integrity": "sha512-5cIATbk5vynAjqqmyBjlciMJl1+R/CwX9oLk/EyiFXDWd95KpHdrOJT//rnUl4cUcskrd0jCCw3wpZnhIHdD9w==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "libc": [
+        "musl"
+      ],
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ]
+    },
+    "node_modules/@rollup/rollup-openbsd-x64": {
+      "version": "4.60.1",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-openbsd-x64/-/rollup-openbsd-x64-4.60.1.tgz",
+      "integrity": "sha512-cl0w09WsCi17mcmWqqglez9Gk8isgeWvoUZ3WiJFYSR3zjBQc2J5/ihSjpl+VLjPqjQ/1hJRcqBfLjssREQILw==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "openbsd"
+      ]
+    },
+    "node_modules/@rollup/rollup-openharmony-arm64": {
+      "version": "4.60.1",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-openharmony-arm64/-/rollup-openharmony-arm64-4.60.1.tgz",
+      "integrity": "sha512-4Cv23ZrONRbNtbZa37mLSueXUCtN7MXccChtKpUnQNgF010rjrjfHx3QxkS2PI7LqGT5xXyYs1a7LbzAwT0iCA==",
+      "cpu": [
+        "arm64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "openharmony"
+      ]
+    },
+    "node_modules/@rollup/rollup-win32-arm64-msvc": {
+      "version": "4.60.1",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-win32-arm64-msvc/-/rollup-win32-arm64-msvc-4.60.1.tgz",
+      "integrity": "sha512-i1okWYkA4FJICtr7KpYzFpRTHgy5jdDbZiWfvny21iIKky5YExiDXP+zbXzm3dUcFpkEeYNHgQ5fuG236JPq0g==",
+      "cpu": [
+        "arm64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "win32"
+      ]
+    },
+    "node_modules/@rollup/rollup-win32-ia32-msvc": {
+      "version": "4.60.1",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-win32-ia32-msvc/-/rollup-win32-ia32-msvc-4.60.1.tgz",
+      "integrity": "sha512-u09m3CuwLzShA0EYKMNiFgcjjzwqtUMLmuCJLeZWjjOYA3IT2Di09KaxGBTP9xVztWyIWjVdsB2E9goMjZvTQg==",
+      "cpu": [
+        "ia32"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "win32"
+      ]
+    },
+    "node_modules/@rollup/rollup-win32-x64-gnu": {
+      "version": "4.60.1",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-win32-x64-gnu/-/rollup-win32-x64-gnu-4.60.1.tgz",
+      "integrity": "sha512-k+600V9Zl1CM7eZxJgMyTUzmrmhB/0XZnF4pRypKAlAgxmedUA+1v9R+XOFv56W4SlHEzfeMtzujLJD22Uz5zg==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "win32"
+      ]
+    },
+    "node_modules/@rollup/rollup-win32-x64-msvc": {
+      "version": "4.60.1",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-win32-x64-msvc/-/rollup-win32-x64-msvc-4.60.1.tgz",
+      "integrity": "sha512-lWMnixq/QzxyhTV6NjQJ4SFo1J6PvOX8vUx5Wb4bBPsEb+8xZ89Bz6kOXpfXj9ak9AHTQVQzlgzBEc1SyM27xQ==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "win32"
+      ]
+    },
+    "node_modules/@types/estree": {
+      "version": "1.0.8",
+      "resolved": "https://registry.npmjs.org/@types/estree/-/estree-1.0.8.tgz",
+      "integrity": "sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w==",
+      "dev": true,
+      "license": "MIT"
+    },
+    "node_modules/@vitejs/plugin-vue": {
+      "version": "5.2.4",
+      "resolved": "https://registry.npmjs.org/@vitejs/plugin-vue/-/plugin-vue-5.2.4.tgz",
+      "integrity": "sha512-7Yx/SXSOcQq5HiiV3orevHUFn+pmMB4cgbEkDYgnkUWb0WfeQ/wa2yFv6D5ICiCQOVpjA7vYDXrC7AGO8yjDHA==",
+      "dev": true,
+      "license": "MIT",
+      "engines": {
+        "node": "^18.0.0 || >=20.0.0"
+      },
+      "peerDependencies": {
+        "vite": "^5.0.0 || ^6.0.0",
+        "vue": "^3.2.25"
+      }
+    },
+    "node_modules/@vue/compiler-core": {
+      "version": "3.5.32",
+      "resolved": "https://registry.npmjs.org/@vue/compiler-core/-/compiler-core-3.5.32.tgz",
+      "integrity": "sha512-4x74Tbtqnda8s/NSD6e1Dr5p1c8HdMU5RWSjMSUzb8RTcUQqevDCxVAitcLBKT+ie3o0Dl9crc/S/opJM7qBGQ==",
+      "license": "MIT",
+      "dependencies": {
+        "@babel/parser": "^7.29.2",
+        "@vue/shared": "3.5.32",
+        "entities": "^7.0.1",
+        "estree-walker": "^2.0.2",
+        "source-map-js": "^1.2.1"
+      }
+    },
+    "node_modules/@vue/compiler-dom": {
+      "version": "3.5.32",
+      "resolved": "https://registry.npmjs.org/@vue/compiler-dom/-/compiler-dom-3.5.32.tgz",
+      "integrity": "sha512-ybHAu70NtiEI1fvAUz3oXZqkUYEe5J98GjMDpTGl5iHb0T15wQYLR4wE3h9xfuTNA+Cm2f4czfe8B4s+CCH57Q==",
+      "license": "MIT",
+      "dependencies": {
+        "@vue/compiler-core": "3.5.32",
+        "@vue/shared": "3.5.32"
+      }
+    },
+    "node_modules/@vue/compiler-sfc": {
+      "version": "3.5.32",
+      "resolved": "https://registry.npmjs.org/@vue/compiler-sfc/-/compiler-sfc-3.5.32.tgz",
+      "integrity": "sha512-8UYUYo71cP/0YHMO814TRZlPuUUw3oifHuMR7Wp9SNoRSrxRQnhMLNlCeaODNn6kNTJsjFoQ/kqIj4qGvya4Xg==",
+      "license": "MIT",
+      "dependencies": {
+        "@babel/parser": "^7.29.2",
+        "@vue/compiler-core": "3.5.32",
+        "@vue/compiler-dom": "3.5.32",
+        "@vue/compiler-ssr": "3.5.32",
+        "@vue/shared": "3.5.32",
+        "estree-walker": "^2.0.2",
+        "magic-string": "^0.30.21",
+        "postcss": "^8.5.8",
+        "source-map-js": "^1.2.1"
+      }
+    },
+    "node_modules/@vue/compiler-ssr": {
+      "version": "3.5.32",
+      "resolved": "https://registry.npmjs.org/@vue/compiler-ssr/-/compiler-ssr-3.5.32.tgz",
+      "integrity": "sha512-Gp4gTs22T3DgRotZ8aA/6m2jMR+GMztvBXUBEUOYOcST+giyGWJ4WvFd7QLHBkzTxkfOt8IELKNdpzITLbA2rw==",
+      "license": "MIT",
+      "dependencies": {
+        "@vue/compiler-dom": "3.5.32",
+        "@vue/shared": "3.5.32"
+      }
+    },
+    "node_modules/@vue/reactivity": {
+      "version": "3.5.32",
+      "resolved": "https://registry.npmjs.org/@vue/reactivity/-/reactivity-3.5.32.tgz",
+      "integrity": "sha512-/ORasxSGvZ6MN5gc+uE364SxFdJ0+WqVG0CENXaGW58TOCdrAW76WWaplDtECeS1qphvtBZtR+3/o1g1zL4xPQ==",
+      "license": "MIT",
+      "dependencies": {
+        "@vue/shared": "3.5.32"
+      }
+    },
+    "node_modules/@vue/runtime-core": {
+      "version": "3.5.32",
+      "resolved": "https://registry.npmjs.org/@vue/runtime-core/-/runtime-core-3.5.32.tgz",
+      "integrity": "sha512-pDrXCejn4UpFDFmMd27AcJEbHaLemaE5o4pbb7sLk79SRIhc6/t34BQA7SGNgYtbMnvbF/HHOftYBgFJtUoJUQ==",
+      "license": "MIT",
+      "dependencies": {
+        "@vue/reactivity": "3.5.32",
+        "@vue/shared": "3.5.32"
+      }
+    },
+    "node_modules/@vue/runtime-dom": {
+      "version": "3.5.32",
+      "resolved": "https://registry.npmjs.org/@vue/runtime-dom/-/runtime-dom-3.5.32.tgz",
+      "integrity": "sha512-1CDVv7tv/IV13V8Nip1k/aaObVbWqRlVCVezTwx3K07p7Vxossp5JU1dcPNhJk3w347gonIUT9jQOGutyJrSVQ==",
+      "license": "MIT",
+      "dependencies": {
+        "@vue/reactivity": "3.5.32",
+        "@vue/runtime-core": "3.5.32",
+        "@vue/shared": "3.5.32",
+        "csstype": "^3.2.3"
+      }
+    },
+    "node_modules/@vue/server-renderer": {
+      "version": "3.5.32",
+      "resolved": "https://registry.npmjs.org/@vue/server-renderer/-/server-renderer-3.5.32.tgz",
+      "integrity": "sha512-IOjm2+JQwRFS7W28HNuJeXQle9KdZbODFY7hFGVtnnghF51ta20EWAZJHX+zLGtsHhaU6uC9BGPV52KVpYryMQ==",
+      "license": "MIT",
+      "dependencies": {
+        "@vue/compiler-ssr": "3.5.32",
+        "@vue/shared": "3.5.32"
+      },
+      "peerDependencies": {
+        "vue": "3.5.32"
+      }
+    },
+    "node_modules/@vue/shared": {
+      "version": "3.5.32",
+      "resolved": "https://registry.npmjs.org/@vue/shared/-/shared-3.5.32.tgz",
+      "integrity": "sha512-ksNyrmRQzWJJ8n3cRDuSF7zNNontuJg1YHnmWRJd2AMu8Ij2bqwiiri2lH5rHtYPZjj4STkNcgcmiQqlOjiYGg==",
+      "license": "MIT"
+    },
+    "node_modules/csstype": {
+      "version": "3.2.3",
+      "resolved": "https://registry.npmjs.org/csstype/-/csstype-3.2.3.tgz",
+      "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==",
+      "license": "MIT"
+    },
+    "node_modules/entities": {
+      "version": "7.0.1",
+      "resolved": "https://registry.npmjs.org/entities/-/entities-7.0.1.tgz",
+      "integrity": "sha512-TWrgLOFUQTH994YUyl1yT4uyavY5nNB5muff+RtWaqNVCAK408b5ZnnbNAUEWLTCpum9w6arT70i1XdQ4UeOPA==",
+      "license": "BSD-2-Clause",
+      "engines": {
+        "node": ">=0.12"
+      },
+      "funding": {
+        "url": "https://github.com/fb55/entities?sponsor=1"
+      }
+    },
+    "node_modules/esbuild": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/esbuild/-/esbuild-0.21.5.tgz",
+      "integrity": "sha512-mg3OPMV4hXywwpoDxu3Qda5xCKQi+vCTZq8S9J/EpkhB2HzKXq4SNFZE3+NK93JYxc8VMSep+lOUSC/RVKaBqw==",
+      "dev": true,
+      "hasInstallScript": true,
+      "license": "MIT",
+      "bin": {
+        "esbuild": "bin/esbuild"
+      },
+      "engines": {
+        "node": ">=12"
+      },
+      "optionalDependencies": {
+        "@esbuild/aix-ppc64": "0.21.5",
+        "@esbuild/android-arm": "0.21.5",
+        "@esbuild/android-arm64": "0.21.5",
+        "@esbuild/android-x64": "0.21.5",
+        "@esbuild/darwin-arm64": "0.21.5",
+        "@esbuild/darwin-x64": "0.21.5",
+        "@esbuild/freebsd-arm64": "0.21.5",
+        "@esbuild/freebsd-x64": "0.21.5",
+        "@esbuild/linux-arm": "0.21.5",
+        "@esbuild/linux-arm64": "0.21.5",
+        "@esbuild/linux-ia32": "0.21.5",
+        "@esbuild/linux-loong64": "0.21.5",
+        "@esbuild/linux-mips64el": "0.21.5",
+        "@esbuild/linux-ppc64": "0.21.5",
+        "@esbuild/linux-riscv64": "0.21.5",
+        "@esbuild/linux-s390x": "0.21.5",
+        "@esbuild/linux-x64": "0.21.5",
+        "@esbuild/netbsd-x64": "0.21.5",
+        "@esbuild/openbsd-x64": "0.21.5",
+        "@esbuild/sunos-x64": "0.21.5",
+        "@esbuild/win32-arm64": "0.21.5",
+        "@esbuild/win32-ia32": "0.21.5",
+        "@esbuild/win32-x64": "0.21.5"
+      }
+    },
+    "node_modules/estree-walker": {
+      "version": "2.0.2",
+      "resolved": "https://registry.npmjs.org/estree-walker/-/estree-walker-2.0.2.tgz",
+      "integrity": "sha512-Rfkk/Mp/DL7JVje3u18FxFujQlTNR2q6QfMSMB7AvCBx91NGj/ba3kCfza0f6dVDbw7YlRf/nDrn7pQrCCyQ/w==",
+      "license": "MIT"
+    },
+    "node_modules/fsevents": {
+      "version": "2.3.3",
+      "resolved": "https://registry.npmjs.org/fsevents/-/fsevents-2.3.3.tgz",
+      "integrity": "sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==",
+      "dev": true,
+      "hasInstallScript": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "darwin"
+      ],
+      "engines": {
+        "node": "^8.16.0 || ^10.6.0 || >=11.0.0"
+      }
+    },
+    "node_modules/magic-string": {
+      "version": "0.30.21",
+      "resolved": "https://registry.npmjs.org/magic-string/-/magic-string-0.30.21.tgz",
+      "integrity": "sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ==",
+      "license": "MIT",
+      "dependencies": {
+        "@jridgewell/sourcemap-codec": "^1.5.5"
+      }
+    },
+    "node_modules/nanoid": {
+      "version": "3.3.11",
+      "resolved": "https://registry.npmjs.org/nanoid/-/nanoid-3.3.11.tgz",
+      "integrity": "sha512-N8SpfPUnUp1bK+PMYW8qSWdl9U+wwNWI4QKxOYDy9JAro3WMX7p2OeVRF9v+347pnakNevPmiHhNmZ2HbFA76w==",
+      "funding": [
+        {
+          "type": "github",
+          "url": "https://github.com/sponsors/ai"
+        }
+      ],
+      "license": "MIT",
+      "bin": {
+        "nanoid": "bin/nanoid.cjs"
+      },
+      "engines": {
+        "node": "^10 || ^12 || ^13.7 || ^14 || >=15.0.1"
+      }
+    },
+    "node_modules/picocolors": {
+      "version": "1.1.1",
+      "resolved": "https://registry.npmjs.org/picocolors/-/picocolors-1.1.1.tgz",
+      "integrity": "sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==",
+      "license": "ISC"
+    },
+    "node_modules/postcss": {
+      "version": "8.5.9",
+      "resolved": "https://registry.npmjs.org/postcss/-/postcss-8.5.9.tgz",
+      "integrity": "sha512-7a70Nsot+EMX9fFU3064K/kdHWZqGVY+BADLyXc8Dfv+mTLLVl6JzJpPaCZ2kQL9gIJvKXSLMHhqdRRjwQeFtw==",
+      "funding": [
+        {
+          "type": "opencollective",
+          "url": "https://opencollective.com/postcss/"
+        },
+        {
+          "type": "tidelift",
+          "url": "https://tidelift.com/funding/github/npm/postcss"
+        },
+        {
+          "type": "github",
+          "url": "https://github.com/sponsors/ai"
+        }
+      ],
+      "license": "MIT",
+      "dependencies": {
+        "nanoid": "^3.3.11",
+        "picocolors": "^1.1.1",
+        "source-map-js": "^1.2.1"
+      },
+      "engines": {
+        "node": "^10 || ^12 || >=14"
+      }
+    },
+    "node_modules/rollup": {
+      "version": "4.60.1",
+      "resolved": "https://registry.npmjs.org/rollup/-/rollup-4.60.1.tgz",
+      "integrity": "sha512-VmtB2rFU/GroZ4oL8+ZqXgSA38O6GR8KSIvWmEFv63pQ0G6KaBH9s07PO8XTXP4vI+3UJUEypOfjkGfmSBBR0w==",
+      "dev": true,
+      "license": "MIT",
+      "dependencies": {
+        "@types/estree": "1.0.8"
+      },
+      "bin": {
+        "rollup": "dist/bin/rollup"
+      },
+      "engines": {
+        "node": ">=18.0.0",
+        "npm": ">=8.0.0"
+      },
+      "optionalDependencies": {
+        "@rollup/rollup-android-arm-eabi": "4.60.1",
+        "@rollup/rollup-android-arm64": "4.60.1",
+        "@rollup/rollup-darwin-arm64": "4.60.1",
+        "@rollup/rollup-darwin-x64": "4.60.1",
+        "@rollup/rollup-freebsd-arm64": "4.60.1",
+        "@rollup/rollup-freebsd-x64": "4.60.1",
+        "@rollup/rollup-linux-arm-gnueabihf": "4.60.1",
+        "@rollup/rollup-linux-arm-musleabihf": "4.60.1",
+        "@rollup/rollup-linux-arm64-gnu": "4.60.1",
+        "@rollup/rollup-linux-arm64-musl": "4.60.1",
+        "@rollup/rollup-linux-loong64-gnu": "4.60.1",
+        "@rollup/rollup-linux-loong64-musl": "4.60.1",
+        "@rollup/rollup-linux-ppc64-gnu": "4.60.1",
+        "@rollup/rollup-linux-ppc64-musl": "4.60.1",
+        "@rollup/rollup-linux-riscv64-gnu": "4.60.1",
+        "@rollup/rollup-linux-riscv64-musl": "4.60.1",
+        "@rollup/rollup-linux-s390x-gnu": "4.60.1",
+        "@rollup/rollup-linux-x64-gnu": "4.60.1",
+        "@rollup/rollup-linux-x64-musl": "4.60.1",
+        "@rollup/rollup-openbsd-x64": "4.60.1",
+        "@rollup/rollup-openharmony-arm64": "4.60.1",
+        "@rollup/rollup-win32-arm64-msvc": "4.60.1",
+        "@rollup/rollup-win32-ia32-msvc": "4.60.1",
+        "@rollup/rollup-win32-x64-gnu": "4.60.1",
+        "@rollup/rollup-win32-x64-msvc": "4.60.1",
+        "fsevents": "~2.3.2"
+      }
+    },
+    "node_modules/source-map-js": {
+      "version": "1.2.1",
+      "resolved": "https://registry.npmjs.org/source-map-js/-/source-map-js-1.2.1.tgz",
+      "integrity": "sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==",
+      "license": "BSD-3-Clause",
+      "engines": {
+        "node": ">=0.10.0"
+      }
+    },
+    "node_modules/vite": {
+      "version": "5.4.21",
+      "resolved": "https://registry.npmjs.org/vite/-/vite-5.4.21.tgz",
+      "integrity": "sha512-o5a9xKjbtuhY6Bi5S3+HvbRERmouabWbyUcpXXUA1u+GNUKoROi9byOJ8M0nHbHYHkYICiMlqxkg1KkYmm25Sw==",
+      "dev": true,
+      "license": "MIT",
+      "dependencies": {
+        "esbuild": "^0.21.3",
+        "postcss": "^8.4.43",
+        "rollup": "^4.20.0"
+      },
+      "bin": {
+        "vite": "bin/vite.js"
+      },
+      "engines": {
+        "node": "^18.0.0 || >=20.0.0"
+      },
+      "funding": {
+        "url": "https://github.com/vitejs/vite?sponsor=1"
+      },
+      "optionalDependencies": {
+        "fsevents": "~2.3.3"
+      },
+      "peerDependencies": {
+        "@types/node": "^18.0.0 || >=20.0.0",
+        "less": "*",
+        "lightningcss": "^1.21.0",
+        "sass": "*",
+        "sass-embedded": "*",
+        "stylus": "*",
+        "sugarss": "*",
+        "terser": "^5.4.0"
+      },
+      "peerDependenciesMeta": {
+        "@types/node": {
+          "optional": true
+        },
+        "less": {
+          "optional": true
+        },
+        "lightningcss": {
+          "optional": true
+        },
+        "sass": {
+          "optional": true
+        },
+        "sass-embedded": {
+          "optional": true
+        },
+        "stylus": {
+          "optional": true
+        },
+        "sugarss": {
+          "optional": true
+        },
+        "terser": {
+          "optional": true
+        }
+      }
+    },
+    "node_modules/vue": {
+      "version": "3.5.32",
+      "resolved": "https://registry.npmjs.org/vue/-/vue-3.5.32.tgz",
+      "integrity": "sha512-vM4z4Q9tTafVfMAK7IVzmxg34rSzTFMyIe0UUEijUCkn9+23lj0WRfA83dg7eQZIUlgOSGrkViIaCfqSAUXsMw==",
+      "license": "MIT",
+      "dependencies": {
+        "@vue/compiler-dom": "3.5.32",
+        "@vue/compiler-sfc": "3.5.32",
+        "@vue/runtime-dom": "3.5.32",
+        "@vue/server-renderer": "3.5.32",
+        "@vue/shared": "3.5.32"
+      },
+      "peerDependencies": {
+        "typescript": "*"
+      },
+      "peerDependenciesMeta": {
+        "typescript": {
+          "optional": true
+        }
+      }
+    }
+  }
+}
+
+
+====================
+FILE: .\frontend\package.json
+====================
+{
+  "name": "wbs-release-manager",
+  "version": "2.0.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": { "vue": "^3.4.0" },
+  "devDependencies": { "@vitejs/plugin-vue": "^5.0.0", "vite": "^5.0.0" }
+}
+
+
+====================
+FILE: .\frontend\vite.config.js
+====================
+import { defineConfig } from 'vite'
+import vue from '@vitejs/plugin-vue'
+export default defineConfig({
+  plugins: [vue()],
+  server: { port:3000, proxy:{ '/api':{ target:'http://localhost:5000', changeOrigin:true } } }
+})
+
+
+====================
+FILE: .\frontend\src\App.vue
+====================
+<template>
+  <div class="app">
+    <!-- GNB -->
+    <header class="gnb">
+      <div class="logo"><div class="logo-dot"></div>WBS Release Manager</div>
+      <nav class="gnb-nav">
+        <div class="gnb-item" :class="{active: view==='list'}" @click="goList">WBS 목록</div>
+        <div class="gnb-item" :class="{active: view==='detail'}" v-if="selectedProject">
+          {{ selectedProject.name }}
+        </div>
+      </nav>
+      <div class="gnb-right">
+        <span class="last-saved">{{ lastSaved }}</span>
+        <button class="btn btn-primary btn-sm" @click="showProjectForm=true">+ 새 WBS</button>
+      </div>
+    </header>
+
+    <!-- 목록 화면 -->
+    <w-b-s-list
+      v-if="view==='list'"
+      :projects="projects"
+      @select="selectProject"
+      @new="showProjectForm=true"
+      @edit="editProj"
+    />
+
+    <!-- 상세 화면 -->
+    <w-b-s-detail
+      v-if="view==='detail' && selectedProject"
+      :project="selectedProject"
+      :logs="logs"
+      @back="goList"
+      @edit-project="editProj"
+      @toast="showToast"
+      @reload-logs="loadLogs"
+      @refresh-projects="loadProjects"
+    />
+
+    <!-- WBS 등록/수정 모달 -->
+    <project-form
+      v-model="showProjectForm"
+      :edit-project="editingProject"
+      @save="saveProject"
+      @delete="deleteProject"
+    />
+
+    <!-- Toast -->
+    <div class="toast-wrap">
+      <div v-for="t in toasts" :key="t.id" class="toast" :class="`toast-${t.type}`">{{ t.msg }}</div>
+    </div>
+  </div>
+</template>
+
+<script>
+import { api } from './api/index.js'
+import WBSList     from './components/WBSList.vue'
+import WBSDetail   from './components/WBSDetail.vue'
+import ProjectForm from './components/ProjectForm.vue'
+
+export default {
+  name: 'App',
+  components: { WBSList, WBSDetail, ProjectForm },
+  data() {
+    return {
+      view: 'list',
+      projects: [],
+      selectedProject: null,
+      logs: [],
+      showProjectForm: false,
+      editingProject: null,
+      lastSaved: '',
+      toasts: [],
+    }
+  },
+  async mounted() {
+    await this.loadProjects()
+    await this.loadLogs()
+  },
+  methods: {
+    async loadProjects() {
+      this.projects = await api.getProjects()
+      this.lastSaved = new Date().toLocaleTimeString('ko', { hour:'2-digit', minute:'2-digit' }) + ' 업데이트'
+      // 상세 화면 열려있으면 selectedProject 갱신
+      if (this.selectedProject) {
+        const updated = this.projects.find(p => p.id === this.selectedProject.id)
+        if (updated) this.selectedProject = updated
+      }
+    },
+    async loadLogs() { this.logs = await api.getLogs() },
+
+    selectProject(proj) { this.selectedProject = proj; this.view = 'detail' },
+    goList() { this.view = 'list'; this.selectedProject = null },
+
+    editProj(proj) { this.editingProject = {...proj}; this.showProjectForm = true },
+
+    async saveProject(form) {
+      if (form.id) {
+        await api.updateProject(form.id, form)
+        this.showToast({ msg: 'WBS가 수정되었습니다', type: 'ok' })
+        if (this.selectedProject?.id === form.id) this.selectedProject = { ...this.selectedProject, ...form }
+      } else {
+        await api.createProject(form)
+        this.showToast({ msg: 'WBS가 등록되었습니다', type: 'ok' })
+      }
+      this.showProjectForm = false
+      this.editingProject = null
+      await this.loadProjects()
+    },
+
+    async deleteProject(id) {
+      await api.deleteProject(id)
+      this.showProjectForm = false
+      this.editingProject = null
+      this.showToast({ msg: 'WBS가 삭제되었습니다', type: 'info' })
+      if (this.selectedProject?.id === id) this.goList()
+      await this.loadProjects()
+    },
+
+    showToast({ msg, type = 'info' }) {
+      const id = Date.now()
+      this.toasts.push({ id, msg, type })
+      setTimeout(() => { this.toasts = this.toasts.filter(t => t.id !== id) }, 3000)
+    }
+  }
+}
+</script>
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#09090f;--bg2:#111118;--bg3:#18181f;--bg4:#1f1f28;
+  --amber:#e8a94a;--amber-dim:#7a5420;
+  --blue:#4a9eff;--blue-dim:#1a3d6a;
+  --green:#4ecb8d;--green-dim:#1a4a32;
+  --red:#ff6b6b;--red-dim:#5a1a1a;
+  --yellow:#f0c040;--yellow-dim:#5a4210;
+  --text:#e2e2ec;--muted:#7070a0;--faint:#3a3a55;
+  --border:#202030;--border2:#2a2a40;
+}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:'Noto Sans KR',sans-serif;font-size:14px;min-height:100vh}
+.app{display:grid;grid-template-rows:auto 1fr;min-height:100vh}
+.gnb{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 20px;height:52px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:100}
+.logo{display:flex;align-items:center;gap:8px;font-family:'DM Mono',monospace;font-size:14px;font-weight:500;color:var(--amber);white-space:nowrap}
+.logo-dot{width:7px;height:7px;background:var(--amber);border-radius:50%;flex-shrink:0}
+.gnb-nav{display:flex;align-items:center;gap:2px;flex:1}
+.gnb-item{padding:6px 14px;border-radius:6px;font-size:13px;color:var(--muted);cursor:pointer;transition:all .15s;white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis}
+.gnb-item:hover{background:var(--bg3);color:var(--text)}
+.gnb-item.active{background:var(--bg4);color:var(--text)}
+.gnb-right{display:flex;align-items:center;gap:8px;margin-left:auto}
+.last-saved{font-size:11px;color:var(--muted);white-space:nowrap}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:7px;font-size:13px;font-family:'Noto Sans KR',sans-serif;cursor:pointer;border:none;transition:all .15s;font-weight:500}
+.btn-primary{background:var(--amber);color:#0a0800}.btn-primary:hover{background:#f0b85a}
+.btn-sm{padding:5px 12px;font-size:12px}
+.toast-wrap{position:fixed;bottom:24px;right:24px;z-index:300;display:flex;flex-direction:column;gap:8px}
+.toast{background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:11px 16px;font-size:13px;animation:slideIn .2s ease;min-width:240px}
+.toast-ok{border-color:var(--green-dim);color:var(--green)}
+.toast-err{border-color:var(--red-dim);color:var(--red)}
+.toast-info{border-color:var(--blue-dim);color:var(--blue)}
+@keyframes slideIn{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
+</style>
+
+
+====================
+FILE: .\frontend\src\main.js
+====================
+import { createApp } from 'vue'
+import App from './App.vue'
+createApp(App).mount('#app')
+
+
+====================
+FILE: .\frontend\src\utils.js
+====================
+export const GROUPS = ['기획','디자인','개발(BE)','개발(FE)','Android','iOS','QA']
+
+export const GROUP_COLORS = {
+  '기획':    'gb-plan',   '디자인':  'gb-design',
+  '개발(BE)':'gb-be',     '개발(FE)':'gb-fe',
+  'Android': 'gb-android','iOS':     'gb-ios',
+  'QA':      'gb-qa',
+}
+
+export function today() {
+  return new Date().toISOString().slice(0, 10)
+}
+export function addDays(d, n) {
+  const dt = new Date(d); dt.setDate(dt.getDate() + n)
+  return dt.toISOString().slice(0, 10)
+}
+export function diffDays(endStr) {
+  if (!endStr) return null
+  return Math.round((new Date(endStr) - new Date(today())) / 86400000)
+}
+export function getStatus(task) {
+  const p = parseInt(task.progress || 0)
+  const d = diffDays(task.endDate)
+  if (p >= 100)   return 'done'
+  if (d === null) return 'pending'
+  if (d < 0)      return 'overdue'
+  if (d <= 7)     return 'risk'
+  if (p > 0)      return 'progress'
+  return 'pending'
+}
+export const STATUS_LABEL = { done:'완료', progress:'진행중', risk:'리스크', overdue:'지연', pending:'대기' }
+export const STATUS_CLASS = { done:'sb-done', progress:'sb-progress', risk:'sb-risk', overdue:'sb-overdue', pending:'sb-pending' }
+
+
+====================
+FILE: .\frontend\src\api\index.js
+====================
+const BASE = 'http://localhost:5000/api'
+
+async function http(method, path, body) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } }
+  if (body) opts.body = JSON.stringify(body)
+  const res = await fetch(BASE + path, opts)
+  if (!res.ok) throw new Error(`${method} ${path} → ${res.status}`)
+  return res.json()
+}
+
+export const api = {
+  // projects
+  getProjects:    ()            => http('GET',    '/projects'),
+  createProject:  (body)        => http('POST',   '/projects', body),
+  updateProject:  (id, body)    => http('PUT',    `/projects/${id}`, body),
+  deleteProject:  (id)          => http('DELETE', `/projects/${id}`),
+  // tasks
+  getTasks:       (pid)         => http('GET',    `/projects/${pid}/tasks`),
+  createTask:     (pid, body)   => http('POST',   `/projects/${pid}/tasks`, body),
+  updateTask:     (pid, tid, b) => http('PUT',    `/projects/${pid}/tasks/${tid}`, b),
+  deleteTask:     (pid, tid)    => http('DELETE', `/projects/${pid}/tasks/${tid}`),
+  // webhook & logs
+  getWebhook:     ()            => http('GET',    '/webhook'),
+  saveWebhook:    (body)        => http('POST',   '/webhook', body),
+  testWebhook:    ()            => http('POST',   '/webhook/test'),
+  getLogs:        ()            => http('GET',    '/logs'),
+  notifyNow:      ()            => http('POST',   '/notify/now'),
+}
+
+
+====================
+FILE: .\frontend\src\components\GanttChart.vue
+====================
+<!-- GanttChart.vue -->
+<template>
+  <div>
+    <div class="gantt-nav">
+      <button class="btn btn-ghost btn-sm" @click="offset--">← 이전</button>
+      <span class="range">{{ dates[0].slice(5).replace('-','/') }} ~ {{ dates[27].slice(5).replace('-','/') }}</span>
+      <button class="btn btn-ghost btn-sm" @click="offset++">다음 →</button>
+    </div>
+    <div class="gantt-wrap">
+      <div v-if="!tasks.length" class="empty-state" style="padding:40px">태스크가 없습니다</div>
+      <div v-else style="overflow-x:auto">
+        <div class="g-row g-header-row">
+          <div class="g-label g-head-cell">태스크</div>
+          <div v-for="(d,i) in dates" :key="d" class="g-day g-head-cell" :class="{today:d===todayStr,'week-start':i%7===0}">{{ new Date(d).getDate() }}</div>
+        </div>
+        <div v-for="t in tasks" :key="t.id" class="g-row">
+          <div class="g-label">
+            <span class="gb" :class="GROUP_COLORS[t.group]||'gb-plan'">{{ t.group }}</span>
+            <span class="g-task-name">{{ t.task }}</span>
+          </div>
+          <template v-for="(d,i) in dates" :key="d">
+            <div v-if="isStart(t,i)" class="g-bar-cell" :style="{width:barW(t)+'px',minWidth:barW(t)+'px'}">
+              <div class="g-bar" :class="barCls(t)">{{ t.task }}</div>
+            </div>
+            <div v-else-if="!inBar(t,i)" class="g-day g-empty" :class="{today:d===todayStr,'week-start':i%7===0}"></div>
+          </template>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+<script>
+import { today, GROUP_COLORS, getStatus } from '../utils.js'
+const DAYS=28, CW=28, LW=180
+export default {
+  name:'GanttChart', props:{tasks:Array},
+  data(){ return{offset:0,todayStr:today(),GROUP_COLORS} },
+  computed:{
+    dates(){ const s=new Date(); s.setDate(s.getDate()+this.offset*DAYS); return Array.from({length:DAYS},(_,i)=>{const d=new Date(s);d.setDate(d.getDate()+i);return d.toISOString().slice(0,10)}) },
+  },
+  methods:{
+    si(t){ return Math.max(0,Math.round((new Date(t.startDate||this.dates[0])-new Date(this.dates[0]))/86400000)) },
+    ei(t){ return Math.min(DAYS-1,Math.round((new Date(t.endDate||this.dates[DAYS-1])-new Date(this.dates[0]))/86400000)) },
+    isStart(t,i){ return i===this.si(t)&&i<=this.ei(t) },
+    inBar(t,i){ return i>this.si(t)&&i<=this.ei(t) },
+    barW(t){ return Math.max(1,this.ei(t)-this.si(t)+1)*CW },
+    barCls(t){ return{done:'bar-done',progress:'bar-prog',risk:'bar-risk',overdue:'bar-over',pending:'bar-prog'}[getStatus(t)] },
+  }
+}
+</script>
+<style scoped>
+.gantt-nav{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.range{font-size:12px;color:var(--muted);min-width:160px;text-align:center}
+.gantt-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.g-row{display:flex;border-bottom:1px solid var(--border);min-height:36px}
+.g-row:last-child{border-bottom:none}
+.g-header-row{background:var(--bg3)}
+.g-head-cell{font-size:9px;color:var(--muted);padding:6px 0;text-align:center}
+.g-label{width:180px;min-width:180px;border-right:1px solid var(--border);padding:7px 10px;display:flex;align-items:center;gap:6px;overflow:hidden}
+.g-task-name{font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.g-day{width:28px;min-width:28px;border-right:1px solid var(--border)}
+.g-day.today{background:rgba(232,169,74,.15);color:var(--amber)}
+.g-day.week-start{background:var(--bg3)}
+.g-empty{height:36px}
+.g-bar-cell{display:flex;align-items:center;padding:9px 3px}
+.g-bar{height:18px;border-radius:4px;display:flex;align-items:center;padding:0 6px;font-size:10px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%}
+.bar-done{background:#1e4a30;color:var(--green);border:1px solid #2a6a40}
+.bar-prog{background:#1a2a4a;color:var(--blue);border:1px solid #2a4a7a}
+.bar-risk{background:#3a3010;color:var(--yellow);border:1px solid #5a4a10}
+.bar-over{background:#3a1010;color:var(--red);border:1px solid #6a2020}
+.gb{display:inline-block;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:500;flex-shrink:0}
+.gb-plan{background:#1a2a4a;color:#4a9eff}.gb-design{background:#2a1a3a;color:#b06aff}
+.gb-be{background:#1a3a2a;color:#4ecb8d}.gb-fe{background:#2a2a1a;color:#f0c040}
+.gb-android{background:#2a1a1a;color:#ff8a4a}.gb-ios{background:#1a2a2a;color:#4aecf0}.gb-qa{background:#2a1a2a;color:#ff6b9d}
+.btn{display:inline-flex;align-items:center;padding:4px 10px;border-radius:7px;font-size:12px;cursor:pointer;border:none;font-family:inherit;font-weight:500}
+.btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--border2)}.btn-ghost:hover{background:var(--bg3);color:var(--text)}
+.btn-sm{padding:4px 10px;font-size:12px}
+.empty-state{text-align:center;color:var(--muted);font-size:13px}
+</style>
+
+
+====================
+FILE: .\frontend\src\components\NotifPanel.vue
+====================
+<!-- NotifPanel.vue -->
+<template>
+  <div class="notif-grid">
+    <div>
+      <div class="notif-card">
+        <h3>웹훅 설정</h3>
+        <div class="field"><label>메신저</label>
+          <select v-model="form.type" @change="form.token='';form.chat='';form.url=''">
+            <option value="telegram">Telegram</option><option value="slack">Slack</option>
+            <option value="teams">Microsoft Teams</option><option value="custom">Custom</option>
+          </select>
+        </div>
+        <template v-if="form.type==='telegram'">
+          <div class="field"><label>Bot Token</label><input type="password" v-model="form.token" placeholder="123456789:AABBccdd..."/></div>
+          <div class="field"><label>Chat ID</label><input v-model="form.chat" placeholder="-1001234567890"/></div>
+        </template>
+        <template v-else>
+          <div class="field"><label>Webhook URL</label><input v-model="form.url" :placeholder="urlPh"/></div>
+        </template>
+        <div class="btn-row">
+          <button class="btn btn-primary" style="flex:1" @click="save">저장</button>
+          <button class="btn btn-ghost" @click="test" :disabled="testing">{{ testing?'전송 중...':'테스트' }}</button>
+        </div>
+        <div class="help">{{ helpText }}</div>
+      </div>
+      <div class="notif-card" style="margin-top:12px">
+        <h3>알림 규칙</h3>
+        <div class="rule-list">
+          <div class="rule-item" v-for="r in rules" :key="r.key">
+            <div class="rule-info"><span style="font-size:16px">{{ r.icon }}</span><div><div style="font-weight:500;font-size:13px">{{ r.label }}</div><div style="font-size:11px;color:var(--muted)">{{ r.sub }}</div></div></div>
+            <label class="toggle"><input type="checkbox" v-model="r.on"><span class="ts"></span></label>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="notif-card">
+        <h3>예정 알림</h3>
+        <div v-if="!alerts.length" class="empty-state">예정된 알림 없음</div>
+        <div v-for="a in alerts" :key="a.task.id" class="alert-item" :class="a.d<=1?'a-1d':'a-7d'">
+          <div style="flex:1"><div style="font-size:13px;font-weight:500">{{ a.task.task }}</div><div style="font-size:11px;color:var(--muted);margin-top:2px">{{ a.task.group }} · {{ a.task.assignee||'미지정' }} · {{ a.task.endDate }}</div></div>
+          <span class="ab" :class="a.d<=1?'ab-1d':'ab-7d'">{{ a.d===0?'오늘':a.d===1?'내일':`D-${a.d}` }}</span>
+        </div>
+      </div>
+      <div class="log-card">
+        <div class="log-head">최근 발송 로그</div>
+        <div v-if="!logs.length" class="empty-state" style="padding:20px">기록 없음</div>
+        <div v-for="l in logs.slice(0,8)" :key="l.time" class="log-item">
+          <div class="log-icon" :class="{'li-ok':l.type==='success','li-err':l.type==='error','li-warn':l.type==='warning'}">{{ l.type==='success'?'✓':l.type==='error'?'✕':'!' }}</div>
+          <div><div style="font-size:13px;font-weight:500">{{ l.title }}</div><div style="font-size:11px;color:var(--muted)">{{ l.detail }} · {{ l.time }}</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+<script>
+import { api } from '../api/index.js'
+import { diffDays } from '../utils.js'
+export default {
+  name:'NotifPanel', props:{tasks:Array,logs:Array}, emits:['toast','reload-logs'],
+  data(){ return{
+    form:{type:'telegram',token:'',chat:'',url:''},
+    testing:false,
+    rules:[
+      {key:'d7',icon:'📅',label:'마감 7일 전',sub:'D-7 자동 알림',on:true},
+      {key:'d1',icon:'⚡',label:'마감 1일 전',sub:'D-1 긴급 알림',on:true},
+      {key:'over',icon:'🚨',label:'마감 초과',sub:'지연 매일 리마인드',on:true},
+    ]
+  }},
+  computed:{
+    alerts(){ return this.tasks.filter(t=>{ if(!t.endDate||parseInt(t.progress||0)>=100)return false; const d=diffDays(t.endDate); return d!==null&&d>=0&&d<=7 }).map(t=>({task:t,d:diffDays(t.endDate)})).sort((a,b)=>a.d-b.d) },
+    urlPh(){ return{slack:'https://hooks.slack.com/services/...',teams:'https://outlook.office.com/webhook/...',custom:'https://your-webhook.com'}[this.form.type]||'' },
+    helpText(){ return{telegram:'① @BotFather에서 봇 생성\n② Chat ID 확인 후 입력',slack:'Slack → Incoming Webhooks에서 URL 발급',teams:'Teams 채널 → 커넥터 → Incoming Webhook',custom:'POST {"text":"메시지"} JSON 전송'}[this.form.type]||'' }
+  },
+  async mounted(){ try{ const wh=await api.getWebhook(); this.form={...this.form,...wh,token:''} }catch{} },
+  methods:{
+    async save(){ await api.saveWebhook(this.form); this.$emit('toast',{msg:'웹훅 저장됨',type:'ok'}) },
+    async test(){ this.testing=true; try{ const r=await api.testWebhook(); this.$emit('toast',{msg:r.ok?'테스트 전송 성공 ✓':`실패: ${r.message}`,type:r.ok?'ok':'err'}); this.$emit('reload-logs') }finally{this.testing=false} }
+  }
+}
+</script>
+<style scoped>
+.notif-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.notif-card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px}
+.notif-card h3{font-size:13px;font-weight:500;margin-bottom:12px}
+.field{margin-bottom:10px}.field label{display:block;font-size:11px;color:var(--muted);margin-bottom:4px}
+.field input,.field select{width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;padding:7px 10px;color:var(--text);font-size:13px;font-family:inherit;outline:none}
+.field input:focus,.field select:focus{border-color:var(--amber)}.field select option{background:var(--bg2)}
+.btn-row{display:flex;gap:8px;margin-top:6px}
+.btn{display:inline-flex;align-items:center;padding:7px 14px;border-radius:7px;font-size:13px;cursor:pointer;border:none;font-family:inherit;font-weight:500}
+.btn-primary{background:var(--amber);color:#0a0800}.btn-primary:hover{background:#f0b85a}
+.btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--border2)}.btn-ghost:hover{background:var(--bg3);color:var(--text)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.help{font-size:11px;color:var(--muted);margin-top:10px;white-space:pre-line;line-height:1.6}
+.rule-list{display:flex;flex-direction:column;gap:8px}
+.rule-item{display:flex;align-items:center;justify-content:space-between;background:var(--bg3);border-radius:7px;padding:10px 12px}
+.rule-info{display:flex;align-items:center;gap:10px}
+.toggle{position:relative;width:36px;height:20px;cursor:pointer}.toggle input{display:none}
+.ts{position:absolute;inset:0;background:var(--bg4);border-radius:999px;transition:.2s}
+.toggle input:checked+.ts{background:var(--amber)}
+.ts::after{content:'';position:absolute;width:14px;height:14px;background:white;border-radius:50%;top:3px;left:3px;transition:.2s}
+.toggle input:checked+.ts::after{left:19px}
+.alert-item{display:flex;align-items:center;gap:10px;background:var(--bg3);border-radius:7px;padding:10px 12px;border-left:3px solid transparent;margin-bottom:6px}
+.a-7d{border-color:var(--yellow)}.a-1d{border-color:var(--red)}
+.ab{font-size:11px;font-weight:500;padding:2px 8px;border-radius:4px;white-space:nowrap}
+.ab-7d{background:var(--yellow-dim);color:var(--yellow)}.ab-1d{background:var(--red-dim);color:var(--red)}
+.log-card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-top:14px}
+.log-head{background:var(--bg3);padding:9px 14px;border-bottom:1px solid var(--border);font-size:11px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.log-item{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:10px}
+.log-item:last-child{border-bottom:none}
+.log-icon{width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0}
+.li-ok{background:var(--green-dim)}.li-err{background:var(--red-dim)}.li-warn{background:var(--yellow-dim)}
+.empty-state{text-align:center;padding:16px;color:var(--muted);font-size:12px}
+@media(max-width:900px){.notif-grid{grid-template-columns:1fr}}
+</style>
+
+
+====================
+FILE: .\frontend\src\components\ProjectForm.vue
+====================
+<template>
+  <div v-if="modelValue" class="overlay" @click.self="$emit('update:modelValue', false)">
+    <div class="modal">
+      <div class="modal-title">{{ editProject ? 'WBS 수정' : '새 WBS 등록' }}</div>
+      <div class="field">
+        <label>프로젝트명 *</label>
+        <input v-model="form.name" placeholder="예: 신규 캐릭터 출시 v1.0" />
+      </div>
+      <div class="field">
+        <label>설명</label>
+        <input v-model="form.description" placeholder="간단한 설명 (선택)" />
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>담당 PM</label>
+          <input v-model="form.pm" placeholder="예: 박수빈" />
+        </div>
+        <div class="field">
+          <label>마감일</label>
+          <input type="date" v-model="form.endDate" />
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button v-if="editProject" class="btn btn-danger" @click="remove">삭제</button>
+        <div style="flex:1"></div>
+        <button class="btn btn-ghost" @click="$emit('update:modelValue', false)">취소</button>
+        <button class="btn btn-primary" @click="submit">{{ editProject ? '저장' : '등록' }}</button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+export default {
+  name: 'ProjectForm',
+  props: { modelValue: Boolean, editProject: Object },
+  emits: ['update:modelValue', 'save', 'delete'],
+  data() { return { form: { name:'', description:'', pm:'', endDate:'' } } },
+  watch: {
+    editProject(val) { this.form = val ? {...val} : { name:'', description:'', pm:'', endDate:'' } },
+    modelValue(v)    { if (v && !this.editProject) this.form = { name:'', description:'', pm:'', endDate:'' } }
+  },
+  methods: {
+    submit() {
+      if (!this.form.name.trim()) { alert('프로젝트명을 입력하세요'); return }
+      this.$emit('save', { ...this.form, id: this.editProject?.id })
+    },
+    remove() {
+      if (!confirm('이 WBS를 삭제하시겠습니까?\n(포함된 태스크도 모두 삭제됩니다)')) return
+      this.$emit('delete', this.editProject.id)
+    }
+  }
+}
+</script>
+
+<style scoped>
+.overlay{ position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:200; display:flex; align-items:center; justify-content:center }
+.modal  { background:var(--bg2); border:1px solid var(--border2); border-radius:12px; padding:24px; width:480px; max-width:90vw }
+.modal-title{ font-size:16px; font-weight:500; margin-bottom:18px }
+.field  { margin-bottom:12px }
+.field label{ display:block; font-size:11px; color:var(--muted); margin-bottom:5px }
+.field input{ width:100%; background:var(--bg3); border:1px solid var(--border2); border-radius:6px; padding:8px 10px; color:var(--text); font-size:13px; font-family:inherit; outline:none }
+.field input:focus{ border-color:var(--amber) }
+.row2  { display:grid; grid-template-columns:1fr 1fr; gap:10px }
+.modal-actions{ display:flex; align-items:center; gap:8px; margin-top:18px }
+.btn   { display:inline-flex; align-items:center; padding:7px 16px; border-radius:7px; font-size:13px; cursor:pointer; border:none; font-family:inherit; font-weight:500 }
+.btn-primary{ background:var(--amber); color:#0a0800 }
+.btn-primary:hover{ background:#f0b85a }
+.btn-ghost  { background:transparent; color:var(--muted); border:1px solid var(--border2) }
+.btn-ghost:hover{ background:var(--bg3); color:var(--text) }
+.btn-danger { background:transparent; color:var(--red); border:1px solid var(--red-dim) }
+.btn-danger:hover{ background:var(--red-dim) }
+</style>
+
+
+====================
+FILE: .\frontend\src\components\TaskForm.vue
+====================
+<template>
+  <div v-if="modelValue" class="overlay" @click.self="$emit('update:modelValue',false)">
+    <div class="modal">
+      <div class="modal-title">{{ editTask ? '태스크 수정' : '태스크 추가' }}</div>
+      <div class="form-grid">
+        <div class="field"><label>그룹</label><select v-model="form.group"><option v-for="g in GROUPS" :key="g">{{ g }}</option></select></div>
+        <div class="field" style="grid-column:span 3"><label>태스크명 *</label><input v-model="form.task" placeholder="예: 신규 캐릭터 API 개발"/></div>
+        <div class="field"><label>담당자</label><input v-model="form.assignee" placeholder="예: 개발자1"/></div>
+        <div class="field"><label>시작일</label><input type="date" v-model="form.startDate"/></div>
+        <div class="field"><label>마감일</label><input type="date" v-model="form.endDate"/></div>
+        <div class="field"><label>진행률(%)</label><input type="number" v-model.number="form.progress" min="0" max="100"/></div>
+        <div class="field" style="grid-column:1/-1"><label>메모</label><input v-model="form.note" placeholder="추가 설명 (선택)"/></div>
+      </div>
+      <div class="modal-actions">
+        <button v-if="editTask" class="btn btn-danger" @click="remove">삭제</button>
+        <div style="flex:1"></div>
+        <button class="btn btn-ghost" @click="$emit('update:modelValue',false)">취소</button>
+        <button class="btn btn-primary" @click="submit">저장</button>
+      </div>
+    </div>
+  </div>
+</template>
+<script>
+import { today, addDays, GROUPS } from '../utils.js'
+const def = () => ({ group:'기획', task:'', assignee:'', startDate:today(), endDate:addDays(today(),14), progress:0, note:'' })
+export default {
+  name:'TaskForm', props:{ modelValue:Boolean, editTask:Object, projectId:String }, emits:['update:modelValue','save','delete'],
+  data(){ return{ form:def(), GROUPS } },
+  watch:{
+    editTask(v){ this.form = v ? {...v} : def() },
+    modelValue(v){ if(v&&!this.editTask) this.form=def() }
+  },
+  methods:{
+    submit(){ if(!this.form.task.trim()){alert('태스크명 입력');return}; if(!this.form.endDate){alert('마감일 입력');return}; this.$emit('save',{...this.form,id:this.editTask?.id}) },
+    remove(){ if(!confirm('삭제하시겠습니까?'))return; this.$emit('delete',this.editTask.id) }
+  }
+}
+</script>
+<style scoped>
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;display:flex;align-items:center;justify-content:center}
+.modal{background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:24px;width:520px;max-width:90vw}
+.modal-title{font-size:15px;font-weight:500;margin-bottom:16px}
+.form-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.field label{display:block;font-size:11px;color:var(--muted);margin-bottom:4px}
+.field input,.field select{width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;padding:7px 10px;color:var(--text);font-size:13px;font-family:inherit;outline:none}
+.field input:focus,.field select:focus{border-color:var(--amber)}.field select option{background:var(--bg2)}
+.modal-actions{display:flex;align-items:center;gap:8px;margin-top:16px}
+.btn{display:inline-flex;align-items:center;padding:7px 16px;border-radius:7px;font-size:13px;cursor:pointer;border:none;font-family:inherit;font-weight:500}
+.btn-primary{background:var(--amber);color:#0a0800}.btn-primary:hover{background:#f0b85a}
+.btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--border2)}.btn-ghost:hover{background:var(--bg3);color:var(--text)}
+.btn-danger{background:transparent;color:var(--red);border:1px solid var(--red-dim)}.btn-danger:hover{background:var(--red-dim)}
+</style>
+
+
+====================
+FILE: .\frontend\src\components\TaskTable.vue
+====================
+<!-- TaskTable.vue -->
+<template>
+  <div class="wbs-wrap">
+    <table class="wbs-table">
+      <thead>
+        <tr><th>그룹</th><th>태스크</th><th>담당자</th><th>시작일</th><th>마감일</th><th>진행률</th><th>상태</th><th>메모</th><th></th></tr>
+      </thead>
+      <tbody>
+        <template v-if="!filtered.length">
+          <tr><td colspan="9" class="empty-state">{{ search ? '검색 결과 없음' : '태스크가 없습니다' }}</td></tr>
+        </template>
+        <template v-for="(list, group) in grouped" :key="group">
+          <tr class="group-row">
+            <td colspan="9"><span class="group-badge" :class="GROUP_COLORS[group]||'gb-plan'">{{ group }}</span></td>
+          </tr>
+          <tr v-for="t in list" :key="t.id" class="task-row">
+            <td></td>
+            <td class="task-name" :title="t.task">{{ t.task }}</td>
+            <td class="muted">{{ t.assignee || '-' }}</td>
+            <td class="mono muted">{{ t.startDate || '-' }}</td>
+            <td class="mono">{{ t.endDate || '-' }} <span :class="dClass(t)" style="font-size:10px">{{ dLabel(t) }}</span></td>
+            <td>
+              <div class="prog-row">
+                <div class="prog-wrap"><div class="prog-fill" :class="pbClass(t)" :style="{width:t.progress+'%'}"></div></div>
+                <span class="mono muted" style="font-size:11px">{{ t.progress }}%</span>
+              </div>
+            </td>
+            <td><span class="status-badge" :class="STATUS_CLASS[getStatus(t)]">{{ STATUS_LABEL[getStatus(t)] }}</span></td>
+            <td class="note muted" :title="t.note">{{ t.note }}</td>
+            <td><button class="icon-btn" @click="$emit('edit', t)">✏️</button></td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </div>
+</template>
+
+<script>
+import { getStatus, diffDays, GROUP_COLORS, STATUS_LABEL, STATUS_CLASS } from '../utils.js'
+export default {
+  name: 'TaskTable',
+  props: { tasks: Array, search: { type:String, default:'' } },
+  emits: ['edit'],
+  data() { return { GROUP_COLORS, STATUS_LABEL, STATUS_CLASS } },
+  computed: {
+    filtered() {
+      const q = (this.search||'').toLowerCase()
+      if (!q) return this.tasks
+      return this.tasks.filter(t => t.task.toLowerCase().includes(q) || (t.assignee||'').toLowerCase().includes(q))
+    },
+    grouped() {
+      const g = {}
+      this.filtered.forEach(t => { if(!g[t.group]) g[t.group]=[]; g[t.group].push(t) })
+      return g
+    }
+  },
+  methods: {
+    getStatus,
+    dLabel(t) { const d=diffDays(t.endDate); if(d===null) return ''; if(d<0) return `${Math.abs(d)}일 초과`; if(d===0) return '오늘'; return `D-${d}` },
+    dClass(t) { const d=diffDays(t.endDate); if(d===null) return ''; if(d<0) return 'dl-over'; if(d===0) return 'dl-today'; return '' },
+    pbClass(t) { const p=parseInt(t.progress||0); return p>=100?'pf-green':p>=50?'pf-yellow':'pf-red' }
+  }
+}
+</script>
+
+<style scoped>
+.wbs-wrap{ background:var(--bg2); border:1px solid var(--border); border-radius:10px; overflow:hidden }
+.wbs-table{ width:100%; border-collapse:collapse }
+.wbs-table th{ background:var(--bg3); padding:9px 12px; text-align:left; font-size:10px; font-weight:500; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; border-bottom:1px solid var(--border); white-space:nowrap }
+.wbs-table td{ padding:9px 12px; border-bottom:1px solid var(--border); vertical-align:middle; font-size:13px }
+.wbs-table tr:last-child td{ border-bottom:none }
+.group-row td{ background:var(--bg3) }
+.task-row:hover td{ background:var(--bg3) }
+.task-name{ font-weight:500; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.note{ max-width:130px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px }
+.mono{ font-family:'DM Mono',monospace; font-size:12px }
+.muted{ color:var(--muted) }
+.dl-over{ color:var(--red) }.dl-today{ color:var(--yellow) }
+.prog-row{ display:flex; align-items:center; gap:6px }
+.prog-wrap{ width:60px; height:4px; background:var(--bg4); border-radius:2px; overflow:hidden }
+.prog-fill{ height:100%; border-radius:2px }
+.pf-green{ background:var(--green) }.pf-yellow{ background:var(--yellow) }.pf-red{ background:var(--red) }
+.status-badge{ display:inline-flex; align-items:center; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:500 }
+.sb-done{ background:var(--green-dim);color:var(--green) }.sb-progress{ background:var(--blue-dim);color:var(--blue) }
+.sb-risk{ background:var(--yellow-dim);color:var(--yellow) }.sb-overdue{ background:var(--red-dim);color:var(--red) }.sb-pending{ background:var(--bg4);color:var(--muted) }
+.group-badge{ display:inline-block; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:500 }
+.gb-plan{ background:#1a2a4a;color:#4a9eff }.gb-design{ background:#2a1a3a;color:#b06aff }
+.gb-be{ background:#1a3a2a;color:#4ecb8d }.gb-fe{ background:#2a2a1a;color:#f0c040 }
+.gb-android{ background:#2a1a1a;color:#ff8a4a }.gb-ios{ background:#1a2a2a;color:#4aecf0 }.gb-qa{ background:#2a1a2a;color:#ff6b9d }
+.icon-btn{ background:none; border:none; color:var(--muted); cursor:pointer; padding:3px 5px; border-radius:5px; transition:all .15s }
+.icon-btn:hover{ color:var(--text); background:var(--bg4) }
+.empty-state{ text-align:center; padding:40px; color:var(--muted); font-size:13px }
+</style>
+
+
+====================
+FILE: .\frontend\src\components\WBSDetail.vue
+====================
+<template>
+  <div>
+    <!-- 상세 상단바 -->
+    <div class="detail-bar">
+      <div class="breadcrumb">
+        <span class="bc-link" @click="$emit('back')">WBS 목록</span>
+        <span class="bc-sep">›</span>
+        <span class="bc-cur">{{ project.name }}</span>
+      </div>
+      <div class="bar-right">
+        <div class="inner-search">
+          <span style="color:var(--muted);font-size:13px">⌕</span>
+          <input v-model="taskSearch" placeholder="태스크, 담당자 검색..." />
+        </div>
+        <button class="btn btn-ghost btn-sm" @click="$emit('edit-project', project)">프로젝트 수정</button>
+        <button class="btn btn-primary btn-sm" @click="openAdd">+ 태스크 추가</button>
+      </div>
+    </div>
+
+    <div class="detail-body">
+      <!-- 메트릭 -->
+      <div class="metrics">
+        <div class="mc"><div class="mc-label">전체</div><div class="mc-val" style="color:var(--blue)">{{ tasks.length }}</div></div>
+        <div class="mc"><div class="mc-label">진행중</div><div class="mc-val" style="color:var(--green)">{{ cnt('progress') + cnt('done') }}</div></div>
+        <div class="mc"><div class="mc-label">리스크</div><div class="mc-val" style="color:var(--yellow)">{{ cnt('risk') }}</div></div>
+        <div class="mc"><div class="mc-label">지연</div><div class="mc-val" style="color:var(--red)">{{ cnt('overdue') }}</div></div>
+      </div>
+
+      <!-- 탭 -->
+      <div class="tabs">
+        <div v-for="t in TABS" :key="t.key" class="tab" :class="{on: activeTab===t.key}" @click="activeTab=t.key">
+          {{ t.label }}
+        </div>
+      </div>
+
+      <!-- 태스크 목록 -->
+      <task-table
+        v-if="activeTab==='tasks'"
+        :tasks="tasks"
+        :search="taskSearch"
+        @edit="openEdit"
+      />
+
+      <!-- 간트 -->
+      <gantt-chart v-if="activeTab==='gantt'" :tasks="tasks" />
+
+      <!-- 알림 -->
+      <notif-panel v-if="activeTab==='notif'" :tasks="tasks" :logs="logs" @toast="$emit('toast',$event)" @reload-logs="$emit('reload-logs')" />
+    </div>
+
+    <!-- 태스크 폼 -->
+    <task-form
+      v-model="showForm"
+      :edit-task="editingTask"
+      :project-id="project.id"
+      @save="saveTask"
+      @delete="deleteTask"
+    />
+  </div>
+</template>
+
+<script>
+import { api } from '../api/index.js'
+import { getStatus } from '../utils.js'
+import TaskTable  from './TaskTable.vue'
+import GanttChart from './GanttChart.vue'
+import NotifPanel from './NotifPanel.vue'
+import TaskForm   from './TaskForm.vue'
+
+const TABS = [
+  { key:'tasks', label:'태스크 목록' },
+  { key:'gantt', label:'간트 차트' },
+  { key:'notif', label:'알림 설정' },
+]
+
+export default {
+  name: 'WBSDetail',
+  components: { TaskTable, GanttChart, NotifPanel, TaskForm },
+  props: { project: Object, logs: Array },
+  emits: ['back', 'edit-project', 'toast', 'reload-logs', 'refresh-projects'],
+  data() {
+    return { tasks:[], activeTab:'tasks', showForm:false, editingTask:null, taskSearch:'', TABS }
+  },
+  async mounted() { await this.loadTasks() },
+  watch: {
+    project() { this.loadTasks() }
+  },
+  methods: {
+    async loadTasks() {
+      this.tasks = await api.getTasks(this.project.id)
+    },
+    cnt(s) { return this.tasks.filter(t => getStatus(t) === s).length },
+    openAdd()      { this.editingTask = null; this.showForm = true },
+    openEdit(task) { this.editingTask = {...task}; this.showForm = true },
+    async saveTask(form) {
+      if (form.id) await api.updateTask(this.project.id, form.id, form)
+      else         await api.createTask(this.project.id, form)
+      this.showForm = false
+      await this.loadTasks()
+      this.$emit('refresh-projects')
+      this.$emit('toast', { msg: form.id ? '태스크가 수정되었습니다' : '태스크가 추가되었습니다', type:'ok' })
+    },
+    async deleteTask(tid) {
+      await api.deleteTask(this.project.id, tid)
+      this.showForm = false
+      await this.loadTasks()
+      this.$emit('refresh-projects')
+      this.$emit('toast', { msg:'삭제되었습니다', type:'info' })
+    }
+  }
+}
+</script>
+
+<style scoped>
+.detail-bar { background:var(--bg2); border-bottom:1px solid var(--border); padding:10px 20px; display:flex; align-items:center; justify-content:space-between; gap:12px }
+.breadcrumb { display:flex; align-items:center; gap:8px; font-size:12px }
+.bc-link    { color:var(--amber); cursor:pointer }
+.bc-link:hover{ text-decoration:underline }
+.bc-sep     { color:var(--faint) }
+.bc-cur     { color:var(--text); font-weight:500 }
+.bar-right  { display:flex; align-items:center; gap:8px }
+.inner-search{ display:flex; align-items:center; gap:6px; background:var(--bg3); border:1px solid var(--border2); border-radius:7px; padding:5px 10px }
+.inner-search input{ background:transparent; border:none; outline:none; color:var(--text); font-size:12px; width:180px; font-family:inherit }
+.inner-search input::placeholder{ color:var(--muted) }
+.detail-body{ padding:16px 20px }
+.metrics    { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:14px }
+.mc         { background:var(--bg2); border:1px solid var(--border); border-radius:8px; padding:12px 14px }
+.mc-label   { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:4px }
+.mc-val     { font-size:22px; font-family:'DM Mono',monospace; font-weight:500 }
+.tabs       { display:flex; gap:2px; background:var(--bg2); border:1px solid var(--border); border-radius:8px; padding:3px; width:fit-content; margin-bottom:14px }
+.tab        { padding:5px 16px; border-radius:6px; cursor:pointer; font-size:12px; color:var(--muted); transition:all .15s }
+.tab.on     { background:var(--bg4); color:var(--text) }
+.btn        { display:inline-flex; align-items:center; gap:6px; padding:7px 14px; border-radius:7px; font-size:13px; cursor:pointer; border:none; font-family:inherit; font-weight:500 }
+.btn-primary{ background:var(--amber); color:#0a0800 }
+.btn-primary:hover{ background:#f0b85a }
+.btn-ghost  { background:transparent; color:var(--muted); border:1px solid var(--border2) }
+.btn-ghost:hover{ background:var(--bg3); color:var(--text) }
+.btn-sm     { padding:5px 10px; font-size:12px }
+</style>
+
+
+====================
+FILE: .\frontend\src\components\WBSList.vue
+====================
+<template>
+  <div class="list-page">
+    <div class="list-card">
+      <!-- 검색 헤더 -->
+      <div class="list-header">
+        <div class="search-wrap">
+          <span class="search-icon">⌕</span>
+          <input
+            v-model="search"
+            class="search-input"
+            placeholder="프로젝트명, 담당자로 검색..."
+          />
+          <button v-if="search" class="clear-btn" @click="search=''">✕</button>
+        </div>
+        <div class="header-right">
+          <span class="count-label">{{ filtered.length }}개</span>
+          <select v-model="statusFilter" class="filter-select">
+            <option value="">전체 상태</option>
+            <option value="progress">진행중</option>
+            <option value="risk">리스크</option>
+            <option value="overdue">지연</option>
+            <option value="done">완료</option>
+            <option value="pending">대기</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- 컬럼 헤더 -->
+      <div class="col-header">
+        <span style="flex:2">프로젝트명</span>
+        <span style="width:100px">담당 PM</span>
+        <span style="width:80px">상태</span>
+        <span style="width:120px">진행률</span>
+        <span style="width:80px">마감일</span>
+        <span style="width:60px">태스크</span>
+        <span style="width:40px"></span>
+      </div>
+
+      <!-- 목록 -->
+      <div v-if="paged.length === 0" class="empty-state">
+        <div class="empty-icon">📋</div>
+        <div>{{ search || statusFilter ? '검색 결과가 없습니다' : 'WBS 프로젝트가 없습니다' }}</div>
+        <button v-if="!search && !statusFilter" class="btn btn-primary" style="margin-top:12px" @click="$emit('new')">
+          + 첫 번째 WBS 만들기
+        </button>
+      </div>
+
+      <div
+        v-for="proj in paged"
+        :key="proj.id"
+        class="proj-row"
+        @click="$emit('select', proj)"
+      >
+        <div class="proj-name-cell" style="flex:2">
+          <div class="proj-name">{{ proj.name }}</div>
+          <div class="proj-desc">{{ proj.description || '설명 없음' }}</div>
+        </div>
+        <div style="width:100px;font-size:12px;color:var(--muted)">{{ proj.pm || '-' }}</div>
+        <div style="width:80px">
+          <span class="status-badge" :class="STATUS_CLASS[proj.status || 'pending']">
+            {{ STATUS_LABEL[proj.status || 'pending'] }}
+          </span>
+        </div>
+        <div style="width:120px">
+          <div class="prog-row">
+            <div class="prog-wrap">
+              <div class="prog-fill" :class="pbClass(proj.status)" :style="{width:(proj.progress||0)+'%'}"></div>
+            </div>
+            <span class="prog-text">{{ proj.progress || 0 }}%</span>
+          </div>
+        </div>
+        <div style="width:80px;font-family:'DM Mono',monospace;font-size:11px;color:var(--muted)">
+          {{ proj.endDate || '-' }}
+        </div>
+        <div style="width:60px;font-size:12px;color:var(--muted);text-align:center">
+          {{ proj.total || 0 }}개
+        </div>
+        <div style="width:40px;display:flex;justify-content:center">
+          <button class="icon-btn" @click.stop="$emit('edit', proj)">✏️</button>
+        </div>
+      </div>
+
+      <!-- 페이지네이션 -->
+      <div class="pagination" v-if="totalPages > 1">
+        <span class="pg-info">{{ (page-1)*PAGE_SIZE+1 }}-{{ Math.min(page*PAGE_SIZE, filtered.length) }} / {{ filtered.length }}개</span>
+        <div class="pg-btns">
+          <button class="pg-btn" :disabled="page===1" @click="page--">←</button>
+          <button
+            v-for="n in totalPages" :key="n"
+            class="pg-btn" :class="{on: page===n}"
+            @click="page=n"
+          >{{ n }}</button>
+          <button class="pg-btn" :disabled="page===totalPages" @click="page++">→</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+import { STATUS_LABEL, STATUS_CLASS } from '../utils.js'
+
+const PAGE_SIZE = 15
+
+export default {
+  name: 'WBSList',
+  props: { projects: Array },
+  emits: ['select', 'new', 'edit'],
+  data() {
+    return { search: '', statusFilter: '', page: 1, PAGE_SIZE, STATUS_LABEL, STATUS_CLASS }
+  },
+  computed: {
+    filtered() {
+      const q = this.search.toLowerCase()
+      return this.projects.filter(p => {
+        if (this.statusFilter && p.status !== this.statusFilter) return false
+        if (q && !p.name.toLowerCase().includes(q) && !(p.pm||'').toLowerCase().includes(q)) return false
+        return true
+      })
+    },
+    totalPages() { return Math.ceil(this.filtered.length / PAGE_SIZE) || 1 },
+    paged() {
+      const s = (this.page - 1) * PAGE_SIZE
+      return this.filtered.slice(s, s + PAGE_SIZE)
+    }
+  },
+  watch: {
+    search()       { this.page = 1 },
+    statusFilter() { this.page = 1 },
+  },
+  methods: {
+    pbClass(s) {
+      return { done:'pf-green', progress:'pf-blue', risk:'pf-yellow', overdue:'pf-red', pending:'pf-blue' }[s] || 'pf-blue'
+    }
+  }
+}
+</script>
+
+<style scoped>
+.list-page  { padding: 20px }
+.list-card  { background:var(--bg2); border:1px solid var(--border); border-radius:10px; overflow:hidden }
+.list-header{ display:flex; align-items:center; gap:12px; padding:12px 14px; border-bottom:1px solid var(--border); background:var(--bg3) }
+.search-wrap{ flex:1; display:flex; align-items:center; gap:8px; background:var(--bg2); border:1px solid var(--border2); border-radius:7px; padding:7px 10px }
+.search-icon{ color:var(--muted); font-size:14px }
+.search-input{ background:transparent; border:none; outline:none; color:var(--text); font-size:13px; flex:1; font-family:inherit }
+.search-input::placeholder{ color:var(--muted) }
+.clear-btn  { background:none; border:none; color:var(--muted); cursor:pointer; font-size:11px; padding:0 2px }
+.header-right{ display:flex; align-items:center; gap:8px }
+.count-label{ font-size:11px; color:var(--muted); white-space:nowrap }
+.filter-select{ background:var(--bg2); border:1px solid var(--border2); border-radius:6px; padding:5px 8px; color:var(--text); font-size:12px; outline:none }
+.filter-select option{ background:var(--bg2) }
+
+.col-header{ display:flex; align-items:center; padding:8px 14px; background:var(--bg3); border-bottom:1px solid var(--border) }
+.col-header span{ font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em }
+
+.proj-row{ display:flex; align-items:center; padding:11px 14px; border-bottom:1px solid var(--border); cursor:pointer; transition:background .12s }
+.proj-row:hover{ background:var(--bg3) }
+.proj-row:last-child{ border-bottom:none }
+.proj-name-cell{ overflow:hidden }
+.proj-name  { font-size:13px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.proj-desc  { font-size:11px; color:var(--muted); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+
+.status-badge{ display:inline-flex; align-items:center; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:500 }
+.sb-done    { background:var(--green-dim); color:var(--green) }
+.sb-progress{ background:var(--blue-dim);  color:var(--blue) }
+.sb-risk    { background:var(--yellow-dim);color:var(--yellow) }
+.sb-overdue { background:var(--red-dim);   color:var(--red) }
+.sb-pending { background:var(--bg4);       color:var(--muted) }
+
+.prog-row   { display:flex; align-items:center; gap:6px }
+.prog-wrap  { flex:1; height:4px; background:var(--bg4); border-radius:2px; overflow:hidden; max-width:70px }
+.prog-fill  { height:100%; border-radius:2px; transition:width .3s }
+.pf-green   { background:var(--green) }
+.pf-blue    { background:var(--blue) }
+.pf-yellow  { background:var(--yellow) }
+.pf-red     { background:var(--red) }
+.prog-text  { font-size:10px; color:var(--muted); font-family:'DM Mono',monospace; white-space:nowrap }
+
+.pagination { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; border-top:1px solid var(--border); background:var(--bg3) }
+.pg-info    { font-size:11px; color:var(--muted) }
+.pg-btns    { display:flex; gap:4px }
+.pg-btn     { padding:3px 9px; border-radius:5px; border:1px solid var(--border2); background:transparent; color:var(--muted); font-size:11px; cursor:pointer }
+.pg-btn.on  { background:var(--bg4); color:var(--text) }
+.pg-btn:disabled{ opacity:.4; cursor:not-allowed }
+
+.empty-state{ text-align:center; padding:50px; color:var(--muted); font-size:13px }
+.empty-icon { font-size:32px; margin-bottom:10px }
+
+.btn{ display:inline-flex; align-items:center; padding:7px 14px; border-radius:7px; font-size:13px; cursor:pointer; border:none; font-family:inherit; font-weight:500 }
+.btn-primary{ background:var(--amber); color:#0a0800 }
+.icon-btn   { background:none; border:none; color:var(--muted); cursor:pointer; padding:3px 5px; border-radius:5px; transition:all .15s; font-size:13px }
+.icon-btn:hover{ color:var(--text); background:var(--bg4) }
+</style>
