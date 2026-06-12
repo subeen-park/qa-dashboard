@@ -12,16 +12,16 @@
 
     <header class="gnb">
       <div class="logo" @click="goHome" style="cursor:pointer">
-        <span class="logo-dot">●</span> PM Suite
+        <span class="logo-dot">●</span> QA Hub
       </div>
       <nav class="gnb-nav">
         <div class="gnb-item" :class="{active: view==='home'}" @click="goHome">홈</div>
-        <div class="gnb-item" :class="{active: view==='list' || view==='detail'}" @click="goList">릴리즈 보드</div>
+        <div class="gnb-item" :class="{active: view==='list' || view==='detail'}" @click="goList">테스트 플랜</div>
         <div class="gnb-item gnb-sub" v-if="view==='detail' && selectedProject">› {{ selectedProject.name }}</div>
         <div class="gnb-item" :class="{active: view==='calendar'}" @click="goPage('calendar')">릴리즈 캘린더</div>
-        <div class="gnb-item" :class="{active: view==='checklist'}" @click="goPage('checklist')">체크리스트</div>
-        <div class="gnb-item" :class="{active: view==='merge'}" @click="goPage('merge')">머지 트래커</div>
-        <div class="gnb-item" :class="{active: view==='jira'}" @click="goPage('jira')">Jira 레이더</div>
+        <div class="gnb-item" :class="{active: view==='automation'}" @click="goPage('automation')">자동화 테스트</div>
+        <div class="gnb-item" :class="{active: view==='merge'}" @click="goPage('merge')">결함 트래커</div>
+        <div class="gnb-item" :class="{active: view==='jira'}" @click="goPage('jira')">품질 대시보드</div>
       </nav>
       <div class="gnb-right">
         <span class="last-saved">{{ lastSaved }}</span>
@@ -33,7 +33,7 @@
         <button class="icon-btn theme-btn" @click="toggleTheme" :title="theme==='dark'?'라이트 모드':'다크 모드'">
           {{ theme==='dark' ? '☀️' : '🌙' }}
         </button>
-        <button v-if="view==='list'||view==='detail'" class="btn btn-primary btn-sm" @click="showProjectForm=true">+ 새 WBS</button>
+        <button v-if="view==='list'||view==='detail'" class="btn btn-primary btn-sm" @click="showProjectForm=true">+ 새 테스트 플랜</button>
       </div>
     </header>
 
@@ -43,28 +43,28 @@
 
         <!-- 히어로 -->
         <div class="home-hero">
-          <div class="home-badge">PM Suite — 릴리즈 관리 도구</div>
-          <h1 class="home-title">PM 업무,<br>한 곳에서 끝내기.</h1>
-          <p class="home-desc">WBS 관리부터 릴리즈 캘린더, 머지 추적, Jira 정체 분석까지<br>팀의 모든 일정을 하나의 대시보드에서 관리하세요.</p>
+          <div class="home-badge">QA Hub — 서비스 품질 관리 도구</div>
+          <h1 class="home-title">서비스 QA,<br>한 곳에서 통합 관리.</h1>
+          <p class="home-desc">테스트 플랜 수립부터 자동화 실행, 결함 트래킹, 품질 지표 분석까지<br>QA 엔지니어링 전반을 하나의 대시보드에서 관리하세요.</p>
           <div class="home-actions">
-            <button class="btn btn-cta" @click="goList">WBS 보드 시작하기 →</button>
-            <button class="btn btn-outline" @click="goPage('merge')">머지 트래커 보기</button>
+            <button class="btn btn-cta" @click="goList">테스트 플랜 시작하기 →</button>
+            <button class="btn btn-outline" @click="goPage('automation')">자동화 테스트 보기</button>
           </div>
           <!-- 통계 칩 -->
           <div class="home-stats">
             <div class="stat-chip">
               <span class="stat-num">{{ projects.length }}</span>
-              <span class="stat-label">진행 중인 WBS</span>
+              <span class="stat-label">테스트 릴리즈</span>
             </div>
             <div class="stat-divider"></div>
             <div class="stat-chip">
               <span class="stat-num">{{ totalTasks }}</span>
-              <span class="stat-label">전체 태스크</span>
+              <span class="stat-label">전체 테스트케이스</span>
             </div>
             <div class="stat-divider"></div>
             <div class="stat-chip">
               <span class="stat-num" :style="{color: overdueCount > 0 ? 'var(--red)' : 'var(--green)'}">{{ overdueCount }}</span>
-              <span class="stat-label">지연 태스크</span>
+              <span class="stat-label">지연 검증</span>
             </div>
           </div>
         </div>
@@ -72,11 +72,11 @@
         <!-- 기능 카드 그리드 -->
         <div class="home-cards">
           <div class="home-card card-wbs" @click="goList">
-            <div class="card-icon ci-wbs">WBS</div>
+            <div class="card-icon ci-wbs">PLAN</div>
             <div class="card-content">
               <div class="card-num">01</div>
-              <div class="card-title">WBS 보드</div>
-              <div class="card-desc">프로젝트별 태스크를 그룹으로 관리하고 간트 차트로 일정을 시각화해요.</div>
+              <div class="card-title">테스트 플랜</div>
+              <div class="card-desc">릴리즈별 테스트 케이스를 Smoke / Regression / Integration 카테고리로 관리해요.</div>
             </div>
             <div class="card-arrow">→</div>
           </div>
@@ -85,34 +85,34 @@
             <div class="card-content">
               <div class="card-num">02</div>
               <div class="card-title">릴리즈 캘린더</div>
-              <div class="card-desc">전체 프로젝트 마감일과 마일스톤을 월별 캘린더로 한눈에 확인해요.</div>
+              <div class="card-desc">서비스별 릴리즈 일정과 QA 검증 기간을 월별 캘린더로 확인해요.</div>
             </div>
             <div class="card-arrow">→</div>
           </div>
-          <div class="home-card card-check" @click="goPage('checklist')">
-            <div class="card-icon ci-chk">CHK</div>
+          <div class="home-card card-auto" @click="goPage('automation')">
+            <div class="card-icon ci-auto">AUTO</div>
             <div class="card-content">
               <div class="card-num">03</div>
-              <div class="card-title">릴리즈 체크리스트</div>
-              <div class="card-desc">릴리즈 전 QA, 배포, 롤백 플랜 등 팀 협업 체크리스트를 관리해요.</div>
+              <div class="card-title">자동화 테스트</div>
+              <div class="card-desc">PC · 모바일 · API · 부하 테스트 자동화 스크립트를 통합 관리하고 실행해요.</div>
             </div>
             <div class="card-arrow">→</div>
           </div>
           <div class="home-card card-merge" @click="goPage('merge')">
-            <div class="card-icon ci-mrg">MRG</div>
+            <div class="card-icon ci-mrg">BUG</div>
             <div class="card-content">
               <div class="card-num">04</div>
-              <div class="card-title">머지 트래커</div>
-              <div class="card-desc">버전별 머지/빌드 현황을 플랫폼별로 실시간 추적하고 배포를 준비해요.</div>
+              <div class="card-title">결함 트래커</div>
+              <div class="card-desc">결함 심각도와 상태를 단계별로 추적하고 탈출/재발 결함을 관리해요.</div>
             </div>
             <div class="card-arrow">→</div>
           </div>
           <div class="home-card card-jira" @click="goPage('jira')">
-            <div class="card-icon ci-jra">JIRA</div>
+            <div class="card-icon ci-jra">DASH</div>
             <div class="card-content">
               <div class="card-num">05</div>
-              <div class="card-title">Jira 레이더</div>
-              <div class="card-desc">Jira 티켓의 정체 구간을 분석하고 병목 담당자 Top 10을 추적해요.</div>
+              <div class="card-title">품질 대시보드</div>
+              <div class="card-desc">릴리즈별 통과율 · 결함 밀도 · 자동화율 등 품질 지표를 시각화해요.</div>
             </div>
             <div class="card-arrow">→</div>
           </div>
@@ -125,10 +125,10 @@
       @select="selectProject" @new="showProjectForm=true" @edit="editProj" @delete="deleteProject" />
     <w-b-s-detail v-if="view==='detail' && selectedProject" :project="selectedProject" :logs="logs"
       @back="goList" @edit-project="editProj" @toast="showToast" @reload-logs="loadLogs" @refresh-projects="loadProjects" />
-    <merge-tracker    v-if="view==='merge'" />
-    <jira-radar       v-if="view==='jira'" />
     <release-calendar  v-if="view==='calendar'" />
-    <release-checklist v-if="view==='checklist'" />
+    <automation-test   v-if="view==='automation'" />
+    <merge-tracker     v-if="view==='merge'" />
+    <jira-radar        v-if="view==='jira'" />
 
     <project-form v-model="showProjectForm" :edit-project="editingProject" @save="saveProject" @delete="deleteProject" />
 
@@ -146,11 +146,11 @@ import ProjectForm       from './components/ProjectForm.vue'
 import MergeTracker      from './components/MergeTracker.vue'
 import JiraRadar         from './components/JiraRadar.vue'
 import ReleaseCalendar   from './components/ReleaseCalendar.vue'
-import ReleaseChecklist  from './components/ReleaseChecklist.vue'
+import AutomationTest    from './components/AutomationTest.vue'
 
 export default {
   name: 'App',
-  components: { WBSList, WBSDetail, ProjectForm, MergeTracker, JiraRadar, ReleaseCalendar, ReleaseChecklist },
+  components: { WBSList, WBSDetail, ProjectForm, MergeTracker, JiraRadar, ReleaseCalendar, AutomationTest },
   data() {
     return {
       view: 'home',
@@ -201,7 +201,7 @@ export default {
     goPage(page)  { this.view = page;  this.selectedProject = null; location.hash = page  },
     onHashChange() {
       const hash = location.hash.replace('#', '') || 'home'
-      const valid = ['home','list','detail','merge','jira','calendar','checklist']
+      const valid = ['home','list','detail','merge','jira','calendar','automation']
       if (valid.includes(hash)) {
         if (hash === 'detail' && !this.selectedProject) { this.view = 'list'; location.hash = 'list' }
         else { this.view = hash; if (hash !== 'detail') this.selectedProject = null }
@@ -209,7 +209,7 @@ export default {
     },
     applyHash() {
       const hash = location.hash.replace('#', '') || 'home'
-      const valid = ['home','list','detail','merge','jira','calendar','checklist']
+      const valid = ['home','list','detail','merge','jira','calendar','automation']
       if (valid.includes(hash) && hash !== 'detail') this.view = hash
       else { this.view = 'home'; location.hash = 'home' }
     },
@@ -217,11 +217,11 @@ export default {
     async saveProject(form) {
       if (form.id) {
         await api.updateProject(form.id, form)
-        this.showToast({ msg: 'WBS가 수정되었습니다', type: 'ok' })
+        this.showToast({ msg: '테스트 플랜이 수정되었습니다', type: 'ok' })
         if (this.selectedProject?.id === form.id) this.selectedProject = { ...this.selectedProject, ...form }
       } else {
         await api.createProject(form)
-        this.showToast({ msg: 'WBS가 등록되었습니다', type: 'ok' })
+        this.showToast({ msg: '테스트 플랜이 등록되었습니다', type: 'ok' })
       }
       this.showProjectForm = false; this.editingProject = null
       await this.loadProjects()
@@ -230,7 +230,7 @@ export default {
       try {
         await api.deleteProject(id)
         this.showProjectForm = false; this.editingProject = null
-        this.showToast({ msg: 'WBS가 삭제되었습니다', type: 'info' })
+        this.showToast({ msg: '테스트 플랜이 삭제되었습니다', type: 'info' })
         if (this.selectedProject?.id === id) this.goList()
         await this.loadProjects()
       } catch(e) { this.showToast({ msg: '삭제 실패: ' + e.message, type: 'err' }) }
@@ -251,19 +251,19 @@ export default {
 </script>
 
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&family=DM+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&family=DM+Mono:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 
-/* ── 라이트 모드 기본 (배민/토스 느낌 — 블루 계열 포인트) ── */
+/* ── 라이트 모드 — 인디고 블루 포인트 ── */
 :root{
   --bg:#f7f8fa;
   --bg2:#ffffff;
   --bg3:#f0f2f5;
   --bg4:#e8eaed;
-  --primary:#3563E9;       /* 포인트 — 진한 인디고 블루 */
+  --primary:#3563E9;
   --primary-dim:#e8edf8;
   --primary-hover:#2450d0;
-  --amber:#3563E9;         /* 하위 호환 */
+  --amber:#3563E9;
   --amber-dim:#e8edf8;
   --blue:#3563E9;
   --blue-dim:#e8edf8;
@@ -273,6 +273,8 @@ export default {
   --red-dim:#fde8e8;
   --yellow:#d48806;
   --yellow-dim:#fef3cd;
+  --purple:#7c3aed;
+  --purple-dim:#f1ecfd;
   --text:#111827;
   --muted:#6b7280;
   --faint:#d1d5db;
@@ -299,6 +301,8 @@ export default {
   --red-dim:rgba(224,85,85,.1);
   --yellow:#d4a843;
   --yellow-dim:rgba(212,168,67,.1);
+  --purple:#a78bfa;
+  --purple-dim:rgba(167,139,250,.12);
   --text:#e8eaf0;
   --muted:#8b93a8;
   --faint:#2a2f45;
@@ -328,7 +332,50 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans KR',sans-seri
 /* ── 공통 버튼 ── */
 .btn{display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:8px;font-size:13px;font-family:'Noto Sans KR',sans-serif;cursor:pointer;border:none;transition:all .15s;font-weight:500}
 .btn-primary{background:var(--primary);color:#fff}.btn-primary:hover{background:var(--primary-hover)}
+.btn-ghost{background:var(--bg3);color:var(--muted);border:1px solid var(--border2)}.btn-ghost:hover{background:var(--bg4);color:var(--text)}
+.btn-danger{background:var(--red-dim);color:var(--red);border:1px solid rgba(229,62,62,.25)}.btn-danger:hover{background:rgba(229,62,62,.2)}
 .btn-sm{padding:6px 14px;font-size:12px}
+
+/* ── 공통 페이지 헤더 ── */
+.page-title{font-size:17px;font-weight:700;color:var(--text)}
+.page-sub{font-size:12px;color:var(--muted);margin-top:3px}
+
+/* ── 공통 메트릭 ── */
+.metrics-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px}
+.metric-card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px}
+.metric-label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
+.metric-val{font-size:26px;font-weight:700;font-family:'JetBrains Mono',monospace}
+.metric-sub{font-size:11px;color:var(--muted);margin-top:3px}
+
+/* ── 공통 테이블 ── */
+.table-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.data-table{width:100%;border-collapse:collapse}
+.data-table th{background:var(--bg3);padding:10px 12px;text-align:left;font-size:11px;font-weight:700;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap;text-transform:uppercase;letter-spacing:.04em}
+.data-table td{padding:11px 12px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle}
+.data-table tr:last-child td{border-bottom:none}
+.data-table tr:hover td{background:var(--bg3)}
+
+/* ── 공통 칩 ── */
+.chip{display:inline-flex;align-items:center;padding:3px 8px;border-radius:5px;font-size:11px;font-weight:600}
+.chip-pass{background:var(--green-dim);color:var(--green)}
+.chip-fail{background:var(--red-dim);color:var(--red)}
+.chip-running{background:var(--yellow-dim);color:var(--yellow)}
+.chip-skipped{background:var(--bg4);color:var(--muted)}
+
+.mono{font-family:'JetBrains Mono','DM Mono',monospace}
+.empty{text-align:center;padding:48px;color:var(--muted);font-size:13px}
+
+/* ── 모달 공통 ── */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;display:flex;align-items:center;justify-content:center}
+.modal{background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:24px;width:520px;max-width:90vw;max-height:85vh;overflow-y:auto}
+.modal-title{font-size:15px;font-weight:700;margin-bottom:18px}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:11px;color:var(--muted);font-weight:600;margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em}
+.field input,.field select,.field textarea{width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:7px;padding:8px 10px;color:var(--text);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--primary)}
+.field textarea{resize:vertical;min-height:72px}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)}
 
 /* ── 홈 ── */
 .home-page{overflow-y:auto;min-height:calc(100vh - 54px)}
@@ -360,22 +407,21 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans KR',sans-seri
 .home-card:hover{border-color:transparent;transform:translateY(-3px);box-shadow:0 8px 28px rgba(0,0,0,.1)}
 .home-card:hover::before{opacity:1}
 
-/* 카드별 포인트 컬러 */
 .card-wbs::before{background:linear-gradient(90deg,#3563E9,#5b8af5)}
 .card-wbs:hover{box-shadow:0 8px 28px rgba(53,99,233,.15)}
 .card-cal::before{background:linear-gradient(90deg,#18a058,#34d399)}
 .card-cal:hover{box-shadow:0 8px 28px rgba(24,160,88,.15)}
-.card-check::before{background:linear-gradient(90deg,#d48806,#fbbf24)}
-.card-check:hover{box-shadow:0 8px 28px rgba(212,136,6,.15)}
+.card-auto::before{background:linear-gradient(90deg,#d48806,#fbbf24)}
+.card-auto:hover{box-shadow:0 8px 28px rgba(212,136,6,.15)}
 .card-merge::before{background:linear-gradient(90deg,#7c3aed,#a78bfa)}
 .card-merge:hover{box-shadow:0 8px 28px rgba(124,58,237,.15)}
 .card-jira::before{background:linear-gradient(90deg,#e53e3e,#fc8181)}
 .card-jira:hover{box-shadow:0 8px 28px rgba(229,62,62,.15)}
 
-.card-icon{font-size:9px;font-weight:800;letter-spacing:.08em;font-family:'DM Mono',monospace;display:inline-flex;align-items:center;justify-content:center;width:36px;height:22px;border-radius:5px;margin-bottom:2px}
+.card-icon{font-size:9px;font-weight:800;letter-spacing:.08em;font-family:'DM Mono',monospace;display:inline-flex;align-items:center;justify-content:center;width:42px;height:22px;border-radius:5px;margin-bottom:2px}
 .ci-wbs{background:rgba(53,99,233,.12);color:#3563E9}
 .ci-cal{background:rgba(24,160,88,.12);color:#18a058}
-.ci-chk{background:rgba(212,136,6,.12);color:#d48806}
+.ci-auto{background:rgba(212,136,6,.12);color:#d48806}
 .ci-mrg{background:rgba(124,58,237,.12);color:#7c3aed}
 .ci-jra{background:rgba(229,62,62,.12);color:#e53e3e}
 .card-content{flex:1}

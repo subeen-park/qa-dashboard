@@ -7,6 +7,21 @@ export const GROUP_COLORS = {
   'QA':      'gb-qa',
 }
 
+export function normalizeGroup(raw) {
+  if (!raw) return '기획'
+  const s = String(raw).trim()
+  if (GROUPS.includes(s)) return s
+  const lower = s.toLowerCase()
+  if (lower.includes('기획') || lower.includes('pm') || lower.includes('plan')) return '기획'
+  if (lower.includes('디자인') || lower.includes('design') || lower.includes('ui') || lower.includes('ux')) return '디자인'
+  if (lower.includes('be') || lower.includes('서버') || lower.includes('백엔드') || lower.includes('backend')) return '개발(BE)'
+  if (lower.includes('fe') || lower.includes('프론트') || lower.includes('frontend') || lower.includes('web')) return '개발(FE)'
+  if (lower.includes('android') || lower.includes('안드')) return 'Android'
+  if (lower.includes('ios') || lower.includes('아이폰')) return 'iOS'
+  if (lower.includes('qa') || lower.includes('테스트') || lower.includes('test')) return 'QA'
+  return '기획'
+}
+
 export function today() {
   return new Date().toISOString().slice(0, 10)
 }
