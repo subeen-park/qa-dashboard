@@ -1,7 +1,5 @@
 # QA Dashboard
 
-**Android 디바이스 QA를 위한 릴리즈 품질 관리 도구**
-
 🔗 **[https://qa-dashboard-flax.vercel.app](https://qa-dashboard-flax.vercel.app)**
 
 ---
@@ -37,6 +35,9 @@ QA Dashboard는 QA 엔지니어가 릴리즈마다 반복되는 검증 작업을
 - Jira 티켓 정체 구간 분석 (정체 일수 기준 필터)
 - 병목 담당자 Top 10 · 막대 그래프
 - 기한 누락 / 기한 지연 티켓 별도 추적
+
+### 자동화테스트
+- 개발 진행중
 
 ---
 
