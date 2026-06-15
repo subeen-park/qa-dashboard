@@ -1,5 +1,7 @@
 # QA Dashboard
 
+![visitors](https://hits.sh/github.com/subeen-park/qa-dashboard.svg)
+
 🔗 **[https://qa-dashboard-flax.vercel.app](https://qa-dashboard-flax.vercel.app)**
 
 ---
