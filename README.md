@@ -1,6 +1,5 @@
-# QA Dashboard
+# QA Dashboard ![Visitor Count](https://visitor-badge.laobi.icu/badge?page_id=subeen-park.qa-dashboard)
 
-![visitors](https://hits.sh/github.com/subeen-park/qa-dashboard.svg)
 
 🔗 **[https://qa-dashboard-flax.vercel.app](https://qa-dashboard-flax.vercel.app)**
 
