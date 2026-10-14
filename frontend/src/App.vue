@@ -353,13 +353,7 @@
       @back="goList" @edit-project="editProj" @toast="showToast" @reload-logs="loadLogs" @refresh-projects="loadProjects" />
     <automation-test v-if="view==='automation'" />
 
-    <div v-if="view==='defect'" class="placeholder-page">
-      <div class="ph-inner">
-        <div class="ph-badge">COMING SOON</div>
-        <h2 class="ph-title">결함 트래커</h2>
-        <p class="ph-desc">Jira 티켓과 GitLab MR을 교차 검증해 릴리즈 범위를 자동 매칭하는 페이지가 들어갑니다.</p>
-      </div>
-    </div>
+    <defect-cross-check v-if="view==='defect'" />
     <div v-if="view==='quality'" class="placeholder-page">
       <div class="ph-inner">
         <div class="ph-badge">COMING SOON</div>
@@ -382,10 +376,11 @@ import WBSList         from './components/WBSList.vue'
 import WBSDetail       from './components/WBSDetail.vue'
 import ProjectForm     from './components/ProjectForm.vue'
 import AutomationTest  from './components/AutomationTest.vue'
+import DefectCrossCheck from './components/DefectCrossCheck.vue'
 
 export default {
   name: 'App',
-  components: { WBSList, WBSDetail, ProjectForm, AutomationTest },
+  components: { WBSList, WBSDetail, ProjectForm, AutomationTest, DefectCrossCheck },
   data() {
     return {
       view: 'home',
@@ -583,7 +578,7 @@ body{
   height:100%;padding:0 32px;
   display:flex;align-items:center;gap:40px;
 }
-.logo{display:flex;align-items:center;gap:8px;cursor:pointer}
+.logo{display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;-webkit-user-select:none}
 .logo-mark{
   background:var(--primary-grad);
   color:#fff;font-size:12px;font-weight:800;
@@ -597,7 +592,7 @@ body{
 .gnb-item{
   padding:8px 14px;font-size:14px;font-weight:500;color:var(--text-sub);
   cursor:pointer;border-radius:8px;transition:all .15s;
-  white-space:nowrap;
+  white-space:nowrap;user-select:none;-webkit-user-select:none;
 }
 .gnb-item:hover{background:var(--bg3);color:var(--text)}
 .gnb-item.active{color:var(--primary);background:var(--primary-dim);font-weight:600}
