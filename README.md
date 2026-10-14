@@ -1,71 +1,65 @@
-# QA Dashboard 
+# QA Hub
 
+> **서비스 품질을 하나의 흐름으로.**
+> QA 엔지니어링의 전 과정 — 테스트 플랜 · 자동화 실행 · Jira × GitLab 교차 검증 · 품질 지표 — 을 하나의 콘솔에서 관리합니다.
 
-<div align="center">
+![QA Hub Preview](./preview.png)
 
-[![Live Demo](https://img.shields.io/badge/🚀%20Live%20Demo-Visit%20Now-2563eb?style=for-the-badge)](https://qa-dashboard-flax.vercel.app)
-![Uploading image.png…]()
+### 🔗 [https://qa-dashboard-flax.vercel.app](https://qa-dashboard-flax.vercel.app)
 
-
-### https://qa-dashboard-flax.vercel.app
-
-**👆 Live Demo 버튼 또는 위 링크를 클릭해 직접 체험해보세요!**
-
-</div>
-
----
+[![Vue](https://img.shields.io/badge/Vue-3-4FC08D?logo=vuedotjs&logoColor=white)]()
+[![Flask](https://img.shields.io/badge/Flask-3-000000?logo=flask&logoColor=white)]()
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-4169E1?logo=postgresql&logoColor=white)]()
+[![Vercel](https://img.shields.io/badge/Deploy-Vercel-000000?logo=vercel&logoColor=white)](https://qa-dashboard-flax.vercel.app)
 
 ---
 
-## 개요
+## 🎯 왜 만들었나
 
-QA Dashboard는 QA 엔지니어가 릴리즈마다 반복되는 검증 작업을 체계적으로 관리할 수 있도록 설계한 풀스택 대시보드입니다. 
-릴리즈별 테스트 진행 상황, 결함 분석, 필드 이슈 추적, 품질 지표 시각화까지 QA 업무 전반을 하나의 화면에서 다룰 수 있어요.
-
----
-
-## 주요 기능
-
-### 릴리즈 보드
-- 릴리즈별 검증 진행 상황과 마감일 관리
-- 그룹별 태스크 배치 및 드래그앤드롭 이동
-- 진행률 일괄 수정 / 자동 백업 / 시점 복원
-
-### 릴리즈 캘린더
-- 전체 릴리즈 마감일을 월별 캘린더로 시각화
-- 상태별 색상 구분 (완료/진행중/리스크/지연/대기)
-- 날짜 클릭 시 해당 일자 릴리즈 상세 패널
-
-### 릴리즈 체크리스트
-- 릴리즈 전 QA 게이트 항목 체크
-- 배포 / 롤백 플랜 / 모니터링 항목 관리
-
-### 머지 트래커
-- 브랜치/버전별 머지 현황 단계 관리 (미빌드 → 빌드완료 → 머지요청 → 머지완료)
-- 메트릭 카드 클릭 시 해당 단계로 즉시 포커싱
-
-### Jira 레이더
-- Jira 티켓 정체 구간 분석 (정체 일수 기준 필터)
-- 병목 담당자 Top 10 · 막대 그래프
-- 기한 누락 / 기한 지연 티켓 별도 추적
-
-### 자동화테스트
-- 개발 진행중
+실무에서 QA 업무는 보통 여러 도구에 분산되어 있어요.
+테스트 플랜은 스프레드시트, 자동화는 별도 리포, 결함 추적은 Jira, 코드 변경은 GitLab, 품질 지표는 수동 집계.
+**이 모든 흐름을 하나의 콘솔로 통합**하면 QA 엔지니어가 설계·실행·추적·분석에 집중할 수 있다는 가설에서 출발했습니다.
 
 ---
 
-## 기술 스택
+## ✨ 주요 기능
 
-| 구분 | 기술 |
+### 🚦 테스트 플랜
+리스크 기반 TC 설계 · Smoke / Regression / Integration 카테고리 관리 · 담당자별 진행률 추적
+
+### 🤖 자동화 테스트
+PC · 모바일 · API · 부하 테스트 통합 실행
+- **Selenium** (웹 브라우저) · **Appium** (Android / iOS)
+- **Postman** (REST / GraphQL) · **JMeter / k6** (부하)
+- Python · Java · JavaScript · TypeScript 멀티 언어 스크립트
+- 실행 결과 자동 집계 + 통과율 추이
+
+### 🔀 결함 트래커 — Jira × GitLab 교차 검증
+릴리즈 범위 자동 매칭으로 배포 리스크 선제 탐지
+- `fixVersion` 기준 Jira 티켓 수집
+- `release/{version}` 브랜치 머지된 MR 수집
+- MR 제목·브랜치·커밋에서 `[A-Z]+-\d+` 패턴으로 Jira 키 추출
+- **매칭 / 누락 / 범위 외 / 상태 불일치** 4가지 자동 분류
+- 담당자에게 Slack · 이메일 자동 알림 (액션 모달)
+
+### 📊 품질 대시보드
+릴리즈별 통과율 · 결함 밀도 · 자동화율 추이 시각화
+
+---
+
+## 🛠 기술 스택
+
+| 영역 | 기술 |
 |------|------|
-| Frontend | Vue 3 (Options API), Vite |
-| Backend  | Flask (Python 3.11) |
+| Frontend | Vue 3 (Options API) · Vite · Pretendard |
+| Backend | Flask (Python 3.11) · psycopg2 |
 | Database | PostgreSQL |
-| 배포     | Vercel + Render |
+| 배포 | Vercel (Frontend) · Render (Backend) |
+| 외부 연동 | Jira REST API · GitLab API · UptimeRobot |
 
 ---
 
-## 프로젝트 구조
+## 📁 프로젝트 구조
 
 ```
 qa-dashboard/
@@ -74,29 +68,21 @@ qa-dashboard/
 │   └── requirements.txt
 └── frontend/
     └── src/
-        ├── App.vue              # GNB + 라우팅
+        ├── App.vue
         ├── api/index.js
-        ├── utils.js
         └── components/
-            ├── WBSList.vue          # 릴리즈 목록
-            ├── WBSDetail.vue        # 릴리즈 상세
-            ├── TaskTable.vue        # 태스크 테이블
-            ├── GanttChart.vue       # 간트 차트
-            ├── TaskForm.vue
-            ├── ProjectForm.vue
-            ├── MergeTracker.vue     # 머지 트래커
-            ├── JiraRadar.vue        # Jira 정체 분석
-            ├── ReleaseCalendar.vue  # 캘린더
-            ├── ReleaseChecklist.vue # 체크리스트
-            └── NotifPanel.vue
+            ├── WBSList.vue             # 테스트 플랜 목록
+            ├── WBSDetail.vue           # 테스트 플랜 상세
+            ├── AutomationTest.vue      # 자동화 테스트 (PC·모바일·API·부하)
+            ├── DefectCrossCheck.vue    # Jira × GitLab 교차 검증
+            └── ...
 ```
 
 ---
 
-## 로컬 실행
+## 🚀 로컬 실행
 
 ### 백엔드
-
 ```bash
 cd backend
 pip install -r requirements.txt
@@ -104,7 +90,6 @@ flask --app app run --port 5000
 ```
 
 ### 프론트엔드
-
 ```bash
 cd frontend
 npm install
@@ -113,54 +98,21 @@ npm run dev
 
 브라우저에서 `http://localhost:5173` 접속.
 
-`.env`에 API 주소 지정 가능:
+---
 
-```
-VITE_API_URL=http://localhost:5000/api
-```
+## 📌 설계 노트
+
+**🔐 데모 환경 안내**
+공개 저장소 특성상 Jira / GitLab 토큰을 노출할 수 없어 **모의 데이터로 UI를 시연**합니다.
+실제 API 호출 모듈은 설계되어 있으며, `.env`에 토큰만 세팅하면 실 데이터로 전환됩니다.
+
+**📊 왜 자체 SVG 차트인가**
+차트 라이브러리 의존성 없이 직접 SVG로 그렸습니다. 번들 크기 최소화 + 디자인 완전 제어가 목적이에요.
 
 ---
 
-## 배포 환경
+## 👤 Developer
 
-| 항목 | 값 |
-|------|------|
-| Frontend | Vercel (main 브랜치 자동 배포) |
-| Backend  | Render (Python 3.11, gunicorn) |
-| DB       | Render PostgreSQL |
-| 슬립 방지 | UptimeRobot 5분 핑 |
-
----
-
-## 데이터베이스 테이블
-
-| 테이블 | 설명 |
-|--------|------|
-| `projects`       | 릴리즈 프로젝트 |
-| `tasks`          | 태스크 (그룹·담당자·진행률) |
-| `task_snapshots` | 자동 백업 (업로드/삭제 전) |
-| `webhook`        | 알림 웹훅 설정 |
-| `logs`           | 활동 로그 |
-
----
-
-## 엑셀 업로드 양식
-
-릴리즈 보드 내 **업로드 ▾ → 업로드 양식 다운받기** 에서 CSV 템플릿을 받을 수 있어요.
-
-| 컬럼 | 설명 | 예시 |
-|------|------|------|
-| Group | 그룹명 | QA |
-| Task | 태스크명 | 회귀 테스트 |
-| Note | 메모 | 핵심 결제 플로우 검증 |
-| JIRA | Jira 티켓 번호 | DEVICE-001 |
-| Assignee | 담당자 | 박수빈 |
-| Start Date | 시작일 | 2026-05-20 |
-| End Date | 마감일 | 2026-05-28 |
-| Progress | 진행률 (0~100) | 80 |
-
----
-
-## 개발자
-
-**박수빈** — [@subeen-park](https://github.com/subeen-park)
+**박수빈 (Subeen Park)**
+QA Engineer @ SOOP (ex. Nexon Networks)
+📬 mas_jaypark@naver.com · [@subeen-park](https://github.com/subeen-park)
