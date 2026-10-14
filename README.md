@@ -4,6 +4,8 @@
 <div align="center">
 
 [![Live Demo](https://img.shields.io/badge/🚀%20Live%20Demo-Visit%20Now-2563eb?style=for-the-badge)](https://qa-dashboard-flax.vercel.app)
+![Uploading image.png…]()
+
 
 ### https://qa-dashboard-flax.vercel.app
 
