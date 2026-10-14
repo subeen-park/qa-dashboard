@@ -306,6 +306,7 @@
         </div>
       </div>
     </div>
+    <automation-runner :show="showRunner" @close="showRunner = false" />
   </div>
 </template>
 
@@ -382,10 +383,14 @@ const MOCK_RUNS = [
   },
 ]
 
+import AutomationRunner from './AutomationRunner.vue'
+
 export default {
   name: 'AutomationTest',
+  components: { AutomationRunner },
   data() {
     return {
+      showRunner: false,
       subTab: 'dashboard',
       all: [...MOCK_SCRIPTS],
       runs: [...MOCK_RUNS],
@@ -508,10 +513,12 @@ export default {
     },
     runSingle(s) {
       this.selectedScripts = [s.id]
-      this.runAutomation()
+      this.showRunner = true
     },
     runAutomation() {
       if (!this.selectedScripts.length) return
+      this.showRunner = true
+      return
       this.isRunning = true
       this.runProgress = 0
       const scripts = this.all.filter(s => this.selectedScripts.includes(s.id))
