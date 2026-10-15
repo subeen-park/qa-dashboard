@@ -20,6 +20,8 @@
           <div class="gnb-item" :class="{active: view==='home'}" @click="goHome">홈</div>
           <div class="gnb-item" :class="{active: view==='list' || view==='detail'}" @click="goList">테스트 플랜</div>
           <div class="gnb-item" :class="{active: view==='automation'}" @click="goPage('automation')">자동화 테스트</div>
+          <div class="gnb-item" :class="{active: view==='farm'}" @click="goPage('farm')">디바이스팜</div>
+          <div class="gnb-item" :class="{active: view==='cicd'}" @click="goPage('cicd')">CI/CD</div>
           <div class="gnb-item" :class="{active: view==='defect'}" @click="goPage('defect')">결함 트래커</div>
           <div class="gnb-item" :class="{active: view==='quality'}" @click="goPage('quality')">품질 대시보드</div>
         </nav>
@@ -57,9 +59,9 @@
               </span>
             </h1>
             <p class="hero-desc">
-              테스트 플랜 수립부터 자동화 실행, 결함 트래킹,<br>
-              품질 지표 분석까지 — QA 엔지니어링의 모든 과정을<br>
-              한 곳에서 관리하세요.
+              테스트 플랜 수립부터 자동화 실행, 디바이스 자동 검증,<br>
+              CI/CD 파이프라인, 결함 트래킹, 품질 지표 분석까지 —<br>
+              QA 엔지니어링의 모든 과정을 한 곳에서 관리하세요.
             </p>
             <div class="hero-cta">
               <button class="btn btn-primary btn-lg" @click="goPage('automation')">
@@ -215,9 +217,31 @@
                 <span class="fc-link">바로 가기 →</span>
               </div>
             </div>
-            <div class="flow-card flow-03" @click="goPage('defect')">
+            <div class="flow-card flow-03" @click="goPage('farm')">
               <div class="fc-top">
                 <div class="fc-num">03</div>
+                <div class="fc-tag tag-device">DEVICE</div>
+              </div>
+              <h3 class="fc-title">디바이스팜</h3>
+              <p class="fc-desc">iPhone·Pixel·Galaxy·iPad 7대 상시 연결. 미러링 뷰로 실시간 테스트 상황 확인, 배터리·가동 시간 모니터링.</p>
+              <div class="fc-foot">
+                <span class="fc-link">바로 가기 →</span>
+              </div>
+            </div>
+            <div class="flow-card flow-04" @click="goPage('cicd')">
+              <div class="fc-top">
+                <div class="fc-num">04</div>
+                <div class="fc-tag tag-cicd">CI/CD</div>
+              </div>
+              <h3 class="fc-title">CI/CD 파이프라인</h3>
+              <p class="fc-desc">PR 머지 → 자동 빌드 → 디바이스팜 배포 → pytest·Appium 전체 디바이스 병렬 실행 → Slack 자동 리포트.</p>
+              <div class="fc-foot">
+                <span class="fc-link">바로 가기 →</span>
+              </div>
+            </div>
+            <div class="flow-card flow-05" @click="goPage('defect')">
+              <div class="fc-top">
+                <div class="fc-num">05</div>
                 <div class="fc-tag tag-bug">BUG</div>
               </div>
               <h3 class="fc-title">결함 트래커</h3>
@@ -226,9 +250,9 @@
                 <span class="fc-link">바로 가기 →</span>
               </div>
             </div>
-            <div class="flow-card flow-04" @click="goPage('quality')">
+            <div class="flow-card flow-06" @click="goPage('quality')">
               <div class="fc-top">
-                <div class="fc-num">04</div>
+                <div class="fc-num">06</div>
                 <div class="fc-tag tag-dash">DASH</div>
               </div>
               <h3 class="fc-title">품질 대시보드</h3>
@@ -316,9 +340,9 @@
                 <div class="cs-sub">Selenium · Appium · Postman · JMeter</div>
               </div>
               <div class="cta-stat">
-                <div class="cs-num">5</div>
+                <div class="cs-num">6</div>
                 <div class="cs-label">QA 업무 영역</div>
-                <div class="cs-sub">플랜 · 실행 · 결함 · 지표 · 분석</div>
+                <div class="cs-sub">플랜 · 자동화 · 디바이스 · CI/CD · 결함 · 지표</div>
               </div>
               <div class="cta-stat">
                 <div class="cs-num">1</div>
@@ -352,7 +376,8 @@
     <w-b-s-detail v-if="view==='detail' && selectedProject" :project="selectedProject" :logs="logs"
       @back="goList" @edit-project="editProj" @toast="showToast" @reload-logs="loadLogs" @refresh-projects="loadProjects" />
     <automation-test v-if="view==='automation'" />
-
+    <DeviceFarm v-if="view==='farm'" />
+    <CICDPipeline v-if="view==='cicd'" />
     <defect-cross-check v-if="view==='defect'" />
     <div v-if="view==='quality'" class="placeholder-page">
       <div class="ph-inner">
@@ -377,10 +402,12 @@ import WBSDetail       from './components/WBSDetail.vue'
 import ProjectForm     from './components/ProjectForm.vue'
 import AutomationTest  from './components/AutomationTest.vue'
 import DefectCrossCheck from './components/DefectCrossCheck.vue'
+import DeviceFarm       from './components/DeviceFarm.vue'
+import CICDPipeline     from './components/CICDPipeline.vue'
 
 export default {
   name: 'App',
-  components: { WBSList, WBSDetail, ProjectForm, AutomationTest, DefectCrossCheck },
+  components: { WBSList, WBSDetail, ProjectForm, AutomationTest, DefectCrossCheck, DeviceFarm, CICDPipeline },
   data() {
     return {
       view: 'home',
@@ -465,7 +492,7 @@ export default {
     goPage(p)    { this.view = p; this.selectedProject = null; location.hash = p; window.scrollTo(0, 0) },
     onHashChange() {
       const hash = location.hash.replace('#', '') || 'home'
-      const valid = ['home','list','detail','automation','defect','quality']
+      const valid = ['home','list','detail','automation','farm','cicd','defect','quality']
       if (valid.includes(hash)) {
         if (hash === 'detail' && !this.selectedProject) { this.view = 'list'; location.hash = 'list' }
         else { this.view = hash; if (hash !== 'detail') this.selectedProject = null }
@@ -473,7 +500,7 @@ export default {
     },
     applyHash() {
       const hash = location.hash.replace('#', '') || 'home'
-      const valid = ['home','list','detail','automation','defect','quality']
+      const valid = ['home','list','detail','automation','farm','cicd','defect','quality']
       if (valid.includes(hash) && hash !== 'detail') this.view = hash
       else { this.view = 'home'; location.hash = 'home' }
     },
@@ -782,7 +809,7 @@ body{
 
 /* Flow */
 .section-flow{padding:120px 0}
-.flow-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.flow-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
 .flow-card{
   background:var(--bg2);border:1.5px solid var(--border);border-radius:20px;
   padding:32px 28px;cursor:pointer;transition:all .25s;
@@ -794,6 +821,8 @@ body{
 .fc-tag{font-size:10px;font-weight:800;padding:4px 10px;border-radius:6px;font-family:'JetBrains Mono',monospace;letter-spacing:.08em}
 .tag-plan{background:#e5f0ff;color:#0064FF}
 .tag-auto{background:#fff5db;color:#c48500}
+.tag-device{background:#e3f8ec;color:#06C755}
+.tag-cicd{background:#D1F7F5;color:#0891B2}
 .tag-bug{background:#f0ebfd;color:#8B5CF6}
 .tag-dash{background:#feecee;color:#F04452}
 .fc-title{font-size:22px;font-weight:800;letter-spacing:-.03em;color:var(--text);margin-top:8px}
