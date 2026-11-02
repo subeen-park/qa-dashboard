@@ -1,4 +1,7 @@
 import os, uuid, requests as req
+from dotenv import load_dotenv
+load_dotenv()  # backend/.env 자동 로드 (DATABASE_URL 등)
+
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -6,8 +9,13 @@ from datetime import datetime, date, timedelta
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
+from automation.routes import automation_bp
+
 app = Flask(__name__)
 CORS(app)
+
+# 자동화 테스트 Blueprint 등록
+app.register_blueprint(automation_bp)
 
 # ── DB 연결 ───────────────────────────────────────────────
 DATABASE_URL = os.environ.get('DATABASE_URL', '')

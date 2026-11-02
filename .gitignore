@@ -1,8 +1,10 @@
-echo "node_modules/
+node_modules/
 frontend/node_modules/
 backend/data/webhook.json
 backend/data/logs.json
+backend/automation/output/
 __pycache__/
 *.pyc
 .env
-.DS_Store" > .gitignore
+.DS_Store
+dist/
