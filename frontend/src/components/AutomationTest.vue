@@ -119,7 +119,7 @@
     </section>
 
     <!-- Runner Modal (라이브 뷰) -->
-    <div v-if="activeRun || runnerModal" class="modal-overlay" @click.self="closeRunnerModal">
+    <div v-if="runnerModal" class="modal-overlay" @click.self="closeRunnerModal">
       <div class="runner-modal">
         <div class="rm-head">
           <div class="rm-title">
@@ -128,8 +128,8 @@
             <span>·</span>
             <span>{{ runnerModal && runnerModal.tc_title || activeTc && activeTc.title }}</span>
           </div>
-          <button class="rm-close" @click="closeRunnerModal" :disabled="activeRun && !isDone">
-            {{ activeRun && !isDone ? '실행 중...' : '×' }}
+          <button class="rm-close" @click="closeRunnerModal" :title="activeRun && !isDone ? '창을 닫아도 테스트는 백그라운드에서 계속 실행됩니다' : '닫기'">
+            ×
           </button>
         </div>
 
@@ -144,10 +144,20 @@
               <div class="ss-ts mono">{{ screenshotTs }}</div>
             </div>
             <div class="ss-frame">
-              <img v-if="screenshotUrl" :src="screenshotUrl" class="ss-img" @error="onImgError" />
-              <div v-else class="ss-placeholder">
-                <div class="ss-ph-icon">📸</div>
-                <div>스크린샷 대기 중...</div>
+              <img
+                v-show="screenshotLoaded"
+                :src="screenshotUrl"
+                class="ss-img"
+                @load="onImgLoad"
+                @error="onImgError"
+              />
+              <div v-if="!screenshotLoaded" class="ss-placeholder">
+                <div class="ss-ph-spinner"></div>
+                <div v-if="activeRun && !isDone">테스트 진행 중...</div>
+                <div v-else>스크린샷 대기 중...</div>
+                <div class="ss-ph-sub" v-if="activeRun && !isDone">
+                  Chromium 로드 + 스텝 실행 중
+                </div>
               </div>
             </div>
             <div class="ss-meta mono" v-if="runnerModal">
@@ -187,6 +197,11 @@
                   </div>
                 </div>
               </div>
+            </div>
+
+            <!-- 실행 중 안내 (닫아도 백그라운드 유지) -->
+            <div v-if="activeRun && !isDone" class="rm-bg-note">
+              💡 창을 닫아도 테스트는 백그라운드에서 계속 실행돼요. 결과는 아래 <b>최근 실행 이력</b>에서 확인하세요.
             </div>
 
             <!-- 완료 요약 -->
@@ -231,7 +246,14 @@ export default {
       ssPollTimer: null,
       screenshotUrl: '',
       screenshotTs: '',
+      screenshotLoaded: false,
     }
+  },
+  watch: {
+    screenshotUrl() {
+      // URL 바뀔 때마다 로드 플래그 리셋 (새 이미지 로드 시도)
+      this.screenshotLoaded = false
+    },
   },
   computed: {
     passCount() { return this.runs.filter(r => r.status === 'pass').length },
@@ -349,7 +371,8 @@ export default {
       const pad = n => n.toString().padStart(2,'0')
       this.screenshotTs = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
     },
-    onImgError() { /* 스크린샷 아직 없음 - 무시 */ },
+    onImgLoad() { this.screenshotLoaded = true },
+    onImgError() { this.screenshotLoaded = false },
     async viewRun(runId) {
       try {
         const res = await fetch(`${API_BASE}/api/test-runs/${runId}`)
@@ -368,10 +391,17 @@ export default {
       }
     },
     closeRunnerModal() {
-      if (this.activeRun && !this.isDone) return
+      // 실행 중이든 아니든 모달 닫음. 백엔드 러너는 백그라운드로 계속 돌아감.
+      // 결과는 "최근 실행 이력"에 자동 반영됨.
+      this.stopPolling()
+      this.activeRun = null
       this.runnerModal = null
       this.activeTc = null
       this.screenshotUrl = ''
+      this.screenshotLoaded = false
+      this.screenshotTs = ''
+      // 혹시 모를 결과 갱신 위해 이력 리로드
+      this.loadRuns()
     },
     statusLabel(s) {
       const map = { queued: '대기', running: '실행 중', pass: '통과', fail: '실패', error: '오류' }
@@ -487,8 +517,10 @@ export default {
 .ss-ts { font-size: 11px; color: #64748B; }
 .ss-frame { background: #0F172A; border-radius: 10px; aspect-ratio: 16 / 9; overflow: hidden; display: flex; align-items: center; justify-content: center; }
 .ss-img { width: 100%; height: 100%; object-fit: contain; }
-.ss-placeholder { color: #64748B; text-align: center; font-size: 13px; }
+.ss-placeholder { color: #94A3B8; text-align: center; font-size: 14px; font-weight: 600; display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .ss-ph-icon { font-size: 36px; margin-bottom: 8px; opacity: .5; }
+.ss-ph-spinner { width: 32px; height: 32px; border: 3px solid rgba(148,163,184,.2); border-top-color: #0064FF; border-radius: 50%; animation: spin 0.9s linear infinite; margin-bottom: 6px; }
+.ss-ph-sub { font-size: 11px; color: #64748B; font-weight: 400; margin-top: 4px; }
 .ss-meta { display: flex; gap: 16px; font-size: 11px; color: #334155; padding: 10px 14px; background: #f9fafc; border-radius: 8px; }
 .ss-k { color: #64748B; }
 
@@ -514,6 +546,8 @@ export default {
 .step-desc { font-size: 12px; color: #0F172A; font-weight: 500; word-break: break-all; }
 .step-error { font-size: 10px; color: #991B1B; margin-top: 4px; background: rgba(240,68,82,.08); padding: 4px 6px; border-radius: 4px; word-break: break-all; }
 
+.rm-bg-note { margin-top: 14px; padding: 10px 12px; background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 8px; font-size: 12px; color: #1E40AF; line-height: 1.5; }
+.rm-bg-note b { font-weight: 700; }
 .rm-summary { margin-top: 16px; padding: 16px; border-radius: 10px; border: 1px solid; }
 .summary-pass { background: #F0FDF4; border-color: #BBF7D0; }
 .summary-fail { background: #FEF2F2; border-color: #FECACA; }
