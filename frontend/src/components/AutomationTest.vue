@@ -128,7 +128,7 @@
             <span>·</span>
             <span>{{ runnerModal && runnerModal.tc_title || activeTc && activeTc.title }}</span>
           </div>
-          <button class="rm-close" @click="closeRunnerModal" :title="activeRun && !isDone ? '창을 닫아도 테스트는 백그라운드에서 계속 실행됩니다' : '닫기'">
+          <button class="rm-close" @click="handleClose" :title="activeRun && !isDone ? '창을 닫아도 테스트는 백그라운드에서 계속 실행됩니다' : '닫기'">
             ×
           </button>
         </div>
@@ -390,9 +390,22 @@ export default {
         console.error('viewRun failed:', e)
       }
     },
+    handleClose() {
+      // 실행 중일 때만 confirm 띄움
+      if (this.activeRun && !this.isDone) {
+        const ok = confirm(
+          '테스트가 아직 실행 중입니다.\n\n' +
+          '창을 닫으면 라이브 뷰는 사라지지만, 테스트는 백그라운드에서 계속 실행됩니다. ' +
+          '결과는 "최근 실행 이력"에서 확인할 수 있고, 다른 TC도 바로 실행할 수 있어요.\n\n' +
+          '닫으시겠습니까?'
+        )
+        if (!ok) return
+      }
+      this.closeRunnerModal()
+    },
     closeRunnerModal() {
-      // 실행 중이든 아니든 모달 닫음. 백엔드 러너는 백그라운드로 계속 돌아감.
-      // 결과는 "최근 실행 이력"에 자동 반영됨.
+      // 모달 닫음. 백엔드 러너는 백그라운드로 계속 돌아가서 결과 저장.
+      // activeRun 리셋해서 다른 TC Run 가능하게 함.
       this.stopPolling()
       this.activeRun = null
       this.runnerModal = null
@@ -400,7 +413,6 @@ export default {
       this.screenshotUrl = ''
       this.screenshotLoaded = false
       this.screenshotTs = ''
-      // 혹시 모를 결과 갱신 위해 이력 리로드
       this.loadRuns()
     },
     statusLabel(s) {
