@@ -459,10 +459,10 @@ export default {
 /* 통일된 chip — 거의 다 회색 톤, Pass/Fail 결과만 강조 */
 .chip { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 700; letter-spacing: -.01em; background: #F1F5F9; color: #475569; }
 .chip-cat-smoke, .chip-cat-regression, .chip-cat-e2e { background: #F1F5F9; color: #475569; }
-.chip-prio { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 800; font-family: 'JetBrains Mono', monospace; }
-.prio-p1 { background: #0F172A; color: #fff; }
-.prio-p2 { background: #F1F5F9; color: #64748B; }
-.prio-p3 { background: #F1F5F9; color: #94A3B8; }
+.chip-prio { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 800; font-family: 'JetBrains Mono', monospace; background: #F1F5F9; }
+.prio-p1 { color: #0F172A; }
+.prio-p2 { color: #64748B; }
+.prio-p3 { color: #94A3B8; }
 .chip-expected { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 700; }
 .exp-pass { background: #DCFCE7; color: #166534; }
 .exp-fail { background: #FEE2E2; color: #991B1B; }
