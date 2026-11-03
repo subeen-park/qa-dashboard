@@ -53,10 +53,11 @@ class WebRunner(BaseRunner):
     def _setup(self):
         import os
         self._pw = sync_playwright().start()
-        self._browser = self._pw.chromium.launch(
+        # WebKit (Safari 엔진) 사용 — Chromium 대비 메모리/CPU 1/2 수준
+        # Render Free tier (0.1 CPU, 512MB RAM)에서 안정적
+        self._browser = self._pw.webkit.launch(
             headless=self.headless,
             slow_mo=SLOW_MO_MS,
-            args=CHROMIUM_ARGS,
         )
         # 녹화는 로컬에서만 (서버 CPU 아낌). 환경변수 RECORD_VIDEO=1이면 켜짐.
         enable_video = os.getenv("RECORD_VIDEO", "0") == "1"
