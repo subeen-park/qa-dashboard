@@ -230,9 +230,6 @@
               <div v-if="runnerModal.error_message" class="sum-err mono">
                 {{ runnerModal.error_message }}
               </div>
-              <div class="sum-actions" v-if="runnerModal.video_path">
-                <a :href="videoUrl" target="_blank" class="btn-video">🎬 녹화 영상 보기</a>
-              </div>
             </div>
           </div>
         </div>
@@ -287,11 +284,6 @@ export default {
     },
     totalSteps() { return this.displaySteps.length },
     completedSteps() { return this.displaySteps.filter(s => ['pass', 'fail'].includes(s.status)).length },
-    videoUrl() {
-      if (!this.runnerModal || !this.runnerModal.video_path) return null
-      const filename = this.runnerModal.video_path.split('/').pop()
-      return `${API_BASE}/api/output/videos/${filename}`
-    },
   },
   async mounted() {
     await this.loadAll()
