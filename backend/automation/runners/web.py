@@ -1,21 +1,44 @@
 """
 웹 러너 (WebRunner) — Playwright 기반
 ──────────────────────────────────
-TC JSON의 steps를 읽어 saucedemo.com 같은 웹 사이트에서 실제로 실행.
-- Chromium 자동 조종 (slow_mo로 실무 수동 QA처럼 느리게)
-- 각 스텝마다 스크린샷 + 스텝 간 wait (라이브 뷰 가독성)
-- 전체 과정 영상 녹화 (.webm)
-- 액션 매핑: fill / click / goto / wait / assert_* 등
+Render Free tier (0.1 CPU, 512MB RAM) 극한 최적화:
+- Chromium 메모리/CPU 플래그
+- slow_mo 거의 0 (라이브 뷰 보이는 최소치만)
+- step_wait 축소
 """
 
 from playwright.sync_api import sync_playwright, expect
 from .base import BaseRunner, VIDEO_DIR
 
 
-# 러너 설정 — 포폴 데모 가독성 우선
-SLOW_MO_MS = 500           # 모든 Playwright action에 500ms 지연 (사람이 조작하는 것처럼)
-STEP_WAIT_MS = 300         # 각 스텝 완료 후 추가 대기 (스크린샷 폴링 간격 맞춤)
-FINAL_WAIT_MS = 1500       # 마지막 스텝 후 teardown 전까지 대기 (녹화 안정화)
+# Free tier 속도 우선 — 라이브 뷰는 "보이기만 함" 수준
+SLOW_MO_MS = 50            # 사실상 지연 없음 (액션 간 50ms)
+STEP_WAIT_MS = 100         # 스크린샷 폴링 캐치 최소치
+FINAL_WAIT_MS = 500        # 녹화 안정화 최소치
+
+
+# Render Free tier에서 Chromium 메모리/CPU 절약
+CHROMIUM_ARGS = [
+    "--no-sandbox",
+    "--disable-dev-shm-usage",
+    "--disable-gpu",
+    "--disable-software-rasterizer",
+    "--disable-background-timer-throttling",
+    "--disable-backgrounding-occluded-windows",
+    "--disable-renderer-backgrounding",
+    "--disable-features=TranslateUI,BlinkGenPropertyTrees",
+    "--disable-extensions",
+    "--disable-component-extensions-with-background-pages",
+    "--disable-ipc-flooding-protection",
+    "--metrics-recording-only",
+    "--mute-audio",
+    "--no-first-run",
+    "--no-default-browser-check",
+    "--disable-blink-features=AutomationControlled",
+    "--disable-sync",
+    "--disable-translate",
+    "--hide-scrollbars",
+]
 
 
 class WebRunner(BaseRunner):
@@ -31,7 +54,8 @@ class WebRunner(BaseRunner):
         self._pw = sync_playwright().start()
         self._browser = self._pw.chromium.launch(
             headless=self.headless,
-            slow_mo=SLOW_MO_MS,     # ← 모든 action을 500ms 느리게
+            slow_mo=SLOW_MO_MS,
+            args=CHROMIUM_ARGS,
         )
         self._context = self._browser.new_context(
             viewport={"width": 1280, "height": 720},
@@ -40,12 +64,10 @@ class WebRunner(BaseRunner):
         )
         self._page = self._context.new_page()
         self._page.goto(self.target_url, wait_until="domcontentloaded")
-        # 첫 페이지 로드 후 1초 대기 (녹화 시작 안정화)
-        self._page.wait_for_timeout(1000)
+        self._page.wait_for_timeout(300)
 
     def _teardown(self):
         try:
-            # 마지막 스텝 후 대기 (녹화에 마지막 상태 포함)
             if self._page:
                 try:
                     self._page.wait_for_timeout(FINAL_WAIT_MS)
@@ -59,7 +81,6 @@ class WebRunner(BaseRunner):
             if self._pw:
                 self._pw.stop()
         finally:
-            # 녹화된 비디오를 올바른 이름으로 이동
             temp_dir = VIDEO_DIR / f"{self.run_id}_tmp"
             if temp_dir.exists():
                 videos = list(temp_dir.glob("*.webm"))
@@ -122,7 +143,6 @@ class WebRunner(BaseRunner):
         else:
             raise ValueError(f"Unknown action: {action}")
 
-        # 각 스텝 완료 후 추가 wait — 라이브 뷰에서 스크린샷 폴링이 캐치할 시간
         self._page.wait_for_timeout(STEP_WAIT_MS)
 
     def _save_screenshot(self, name):
