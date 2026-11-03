@@ -51,20 +51,25 @@ class WebRunner(BaseRunner):
         self._page = None
 
     def _setup(self):
+        import os
         self._pw = sync_playwright().start()
         self._browser = self._pw.chromium.launch(
             headless=self.headless,
             slow_mo=SLOW_MO_MS,
             args=CHROMIUM_ARGS,
         )
-        self._context = self._browser.new_context(
-            viewport={"width": 1280, "height": 720},
-            record_video_dir=str(VIDEO_DIR / f"{self.run_id}_tmp"),
-            record_video_size={"width": 1280, "height": 720},
-        )
+        # 녹화는 로컬에서만 (서버 CPU 아낌). 환경변수 RECORD_VIDEO=1이면 켜짐.
+        enable_video = os.getenv("RECORD_VIDEO", "0") == "1"
+        context_opts = {
+            "viewport": {"width": 1024, "height": 576},   # 1280x720 → 1024x576 (렌더 부담 ↓)
+        }
+        if enable_video:
+            context_opts["record_video_dir"] = str(VIDEO_DIR / f"{self.run_id}_tmp")
+            context_opts["record_video_size"] = {"width": 1024, "height": 576}
+        self._context = self._browser.new_context(**context_opts)
         self._page = self._context.new_page()
         self._page.goto(self.target_url, wait_until="domcontentloaded")
-        self._page.wait_for_timeout(300)
+        self._page.wait_for_timeout(200)
 
     def _teardown(self):
         try:
