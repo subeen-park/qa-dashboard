@@ -229,18 +229,6 @@
       </div>
     </section>
 
-    <!-- Confirm Modal (전용) -->
-    <div v-if="confirmDialog" class="confirm-overlay" @click.self="cancelConfirm">
-      <div class="confirm-modal">
-        <div class="confirm-icon">⚠</div>
-        <div class="confirm-title">{{ confirmDialog.title }}</div>
-        <div class="confirm-message">{{ confirmDialog.message }}</div>
-        <div class="confirm-actions">
-          <button class="confirm-btn-cancel" @click="cancelConfirm">취소</button>
-          <button class="confirm-btn-ok" @click="okConfirm">확인</button>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -393,21 +381,8 @@ export default {
       } catch (e) {}
     },
     handleClose() {
-      if (this.activeRun && !this.isDone) {
-        this.confirmDialog = {
-          title: '테스트가 아직 실행 중이에요',
-          message: '창을 닫으면 라이브 뷰는 사라지지만, 테스트는 백그라운드에서 계속 실행돼요. 결과는 "최근 실행 이력"에서 확인할 수 있고, 다른 TC도 바로 실행할 수 있어요.',
-        }
-        return
-      }
+      // 바로 닫음. 백엔드 러너는 백그라운드로 계속 돌아가서 결과 저장됨.
       this.closeRunnerPanel()
-    },
-    okConfirm() {
-      this.confirmDialog = null
-      this.closeRunnerPanel()
-    },
-    cancelConfirm() {
-      this.confirmDialog = null
     },
     closeRunnerPanel() {
       this.stopPolling()
@@ -445,7 +420,7 @@ export default {
 .ah-sub { font-size: 14px; line-height: 1.75; color: #334155; word-break: keep-all; }
 .ah-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .stat-tile { background: #fff; border: 1px solid #E5E8EB; border-radius: 10px; padding: 14px; display: flex; align-items: center; gap: 10px; }
-.st-ic { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; }
+.st-ic { width: 32px; height: 32px; border-radius: 8px; background: #F1F5F9 !important; color: #64748B !important; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; }
 .st-v { font-size: 20px; font-weight: 800; color: #0F172A; letter-spacing: -.02em; }
 .st-l { font-size: 11px; color: #64748B; font-weight: 500; margin-top: 2px; }
 
@@ -481,16 +456,15 @@ export default {
 .btn-run:hover:not(:disabled) { background: #0051d3; }
 .btn-run:disabled { background: #CBD5E1; cursor: not-allowed; }
 
-.chip { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 700; letter-spacing: -.01em; }
-.chip-cat-smoke { background: #DBEAFE; color: #1E40AF; }
-.chip-cat-regression { background: #FEF3C7; color: #92400E; }
-.chip-cat-e2e { background: #E0E7FF; color: #4338CA; }
+/* 통일된 chip — 거의 다 회색 톤, Pass/Fail 결과만 강조 */
+.chip { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 700; letter-spacing: -.01em; background: #F1F5F9; color: #475569; }
+.chip-cat-smoke, .chip-cat-regression, .chip-cat-e2e { background: #F1F5F9; color: #475569; }
 .chip-prio { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 800; font-family: 'JetBrains Mono', monospace; }
-.prio-p1 { background: #FEE2E2; color: #991B1B; }
-.prio-p2 { background: #FEF3C7; color: #92400E; }
-.prio-p3 { background: #E5E7EB; color: #374151; }
+.prio-p1 { background: #0F172A; color: #fff; }
+.prio-p2 { background: #F1F5F9; color: #64748B; }
+.prio-p3 { background: #F1F5F9; color: #94A3B8; }
 .chip-expected { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 700; }
-.exp-pass { background: #D1FAE5; color: #065F46; }
+.exp-pass { background: #DCFCE7; color: #166534; }
 .exp-fail { background: #FEE2E2; color: #991B1B; }
 
 /* History */
@@ -503,11 +477,11 @@ export default {
 .hist-tc-title { font-size: 12px; color: #0F172A; font-weight: 600; }
 .hist-time { font-size: 10px; color: #64748B; }
 .status-chip { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; }
-.st-pass { background: #D1FAE5; color: #065F46; }
+.st-pass { background: #DCFCE7; color: #166534; }
 .st-fail { background: #FEE2E2; color: #991B1B; }
-.st-error { background: #FEF3C7; color: #92400E; }
-.st-running { background: #DBEAFE; color: #1E40AF; }
-.st-queued { background: #F1F5F9; color: #475569; }
+.st-error { background: #F1F5F9; color: #475569; }
+.st-running { background: #e5f0ff; color: #0064FF; }
+.st-queued { background: #F1F5F9; color: #94A3B8; }
 .btn-detail { background: #f6f7f9; border: 1px solid #E5E8EB; padding: 4px 9px; border-radius: 5px; font-size: 11px; cursor: pointer; font-family: inherit; color: #334155; }
 .btn-detail:hover { background: #eef0f3; }
 
