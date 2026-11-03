@@ -118,8 +118,21 @@
       </div>
     </section>
 
+    <!-- Confirm Modal (전용 디자인) -->
+    <div v-if="confirmDialog" class="confirm-overlay" @click.self="cancelConfirm">
+      <div class="confirm-modal">
+        <div class="confirm-icon">⚠</div>
+        <div class="confirm-title">{{ confirmDialog.title }}</div>
+        <div class="confirm-message">{{ confirmDialog.message }}</div>
+        <div class="confirm-actions">
+          <button class="confirm-btn-cancel" @click="cancelConfirm">취소</button>
+          <button class="confirm-btn-ok" @click="okConfirm">확인</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Runner Modal (라이브 뷰) -->
-    <div v-if="runnerModal" class="modal-overlay" @click.self="closeRunnerModal">
+    <div v-if="runnerModal" class="modal-overlay" @click.self="handleClose">
       <div class="runner-modal">
         <div class="rm-head">
           <div class="rm-title">
@@ -247,14 +260,10 @@ export default {
       screenshotUrl: '',
       screenshotTs: '',
       screenshotLoaded: false,
+      confirmDialog: null,
     }
   },
-  watch: {
-    screenshotUrl() {
-      // URL 바뀔 때마다 로드 플래그 리셋 (새 이미지 로드 시도)
-      this.screenshotLoaded = false
-    },
-  },
+  // watch 제거: 한 번 이미지 로드되면 폴링 중 교체돼도 스피너 안 뜨게
   computed: {
     passCount() { return this.runs.filter(r => r.status === 'pass').length },
     failCount() { return this.runs.filter(r => r.status === 'fail').length },
@@ -319,6 +328,8 @@ export default {
     },
     async runTc(tc) {
       this.activeTc = tc
+      this.screenshotUrl = ''
+      this.screenshotLoaded = false   // 새 Run 시작하면 스피너 다시 뜸
       this.runnerModal = {
         id: '-',
         status: 'queued',
@@ -372,7 +383,7 @@ export default {
       this.screenshotTs = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
     },
     onImgLoad() { this.screenshotLoaded = true },
-    onImgError() { this.screenshotLoaded = false },
+    onImgError() { /* 이미 로드된 적 있으면 유지, 조용히 무시 */ },
     async viewRun(runId) {
       try {
         const res = await fetch(`${API_BASE}/api/test-runs/${runId}`)
@@ -391,17 +402,22 @@ export default {
       }
     },
     handleClose() {
-      // 실행 중일 때만 confirm 띄움
+      // 실행 중일 때만 전용 confirm 띄움
       if (this.activeRun && !this.isDone) {
-        const ok = confirm(
-          '테스트가 아직 실행 중입니다.\n\n' +
-          '창을 닫으면 라이브 뷰는 사라지지만, 테스트는 백그라운드에서 계속 실행됩니다. ' +
-          '결과는 "최근 실행 이력"에서 확인할 수 있고, 다른 TC도 바로 실행할 수 있어요.\n\n' +
-          '닫으시겠습니까?'
-        )
-        if (!ok) return
+        this.confirmDialog = {
+          title: '테스트가 아직 실행 중이에요',
+          message: '창을 닫으면 라이브 뷰는 사라지지만, 테스트는 백그라운드에서 계속 실행돼요. 결과는 "최근 실행 이력"에서 확인할 수 있고, 다른 TC도 바로 실행할 수 있어요.',
+        }
+        return
       }
       this.closeRunnerModal()
+    },
+    okConfirm() {
+      this.confirmDialog = null
+      this.closeRunnerModal()
+    },
+    cancelConfirm() {
+      this.confirmDialog = null
     },
     closeRunnerModal() {
       // 모달 닫음. 백엔드 러너는 백그라운드로 계속 돌아가서 결과 저장.
@@ -501,6 +517,19 @@ export default {
 
 .empty-state { padding: 60px 20px; text-align: center; background: #fff; border: 1px dashed #E5E8EB; border-radius: 12px; color: #64748B; font-size: 14px; }
 .es-sub { font-size: 12px; margin-top: 8px; color: #94A3B8; }
+
+/* Confirm Modal (전용) */
+.confirm-overlay { position: fixed; inset: 0; z-index: 1100; background: rgba(15,23,42,.65); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; padding: 20px; animation: fadeIn .18s; }
+.confirm-modal { background: #fff; border-radius: 16px; max-width: 420px; width: 100%; padding: 28px 24px 20px; text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,.25); animation: slideUp .22s; }
+.confirm-icon { width: 48px; height: 48px; border-radius: 50%; background: #FEF3C7; color: #B45309; font-size: 24px; font-weight: 800; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; }
+.confirm-title { font-size: 17px; font-weight: 800; color: #0F172A; letter-spacing: -.02em; margin-bottom: 10px; }
+.confirm-message { font-size: 13px; line-height: 1.65; color: #475569; margin-bottom: 24px; word-break: keep-all; }
+.confirm-actions { display: flex; gap: 10px; }
+.confirm-btn-cancel, .confirm-btn-ok { flex: 1; padding: 12px 16px; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer; border: none; font-family: inherit; transition: all .15s; }
+.confirm-btn-cancel { background: #f1f3f5; color: #475569; }
+.confirm-btn-cancel:hover { background: #e2e8f0; }
+.confirm-btn-ok { background: #0064FF; color: #fff; }
+.confirm-btn-ok:hover { background: #0051d3; }
 
 .modal-overlay { position: fixed; inset: 0; z-index: 1000; background: rgba(15,23,42,.6); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 20px; animation: fadeIn .2s; }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
