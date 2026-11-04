@@ -3,18 +3,45 @@
     <!-- 페이지 설명 -->
     <div class="page-intro">
       <div class="intro-eyebrow">TEST PLAN</div>
-      <h1 class="intro-title">리스크 기반 TC 설계와<br>진행 추적 콘솔</h1>
-      <p class="intro-sub">
-        QA 프로젝트별 WBS(Work Breakdown Structure)로 Smoke · Regression · E2E 카테고리를 관리하고,
-        담당자별 진행률과 지연 리스크를 실시간 추적합니다.
-      </p>
-      <div class="intro-features">
-        <span class="feat-chip"><b>프로젝트 CRUD</b> · 생성 · 수정 · 삭제</span>
-        <span class="feat-chip"><b>태스크 WBS</b> · 그룹별 분류 · 담당자 배정</span>
-        <span class="feat-chip"><b>진행률 추적</b> · 간트 차트 · 지연 플래그</span>
-        <span class="feat-chip"><b>엑셀 업로드</b> · 대량 TC 일괄 등록</span>
-      </div>
+      <h1 class="intro-title">프로젝트 단위 WBS 관리</h1>
+      <p class="intro-sub">프로젝트별 WBS로 담당자별 진행률을 관리합니다.</p>
     </div>
+
+    <!-- 메인: 좌 사이드바(버전) + 우 콘텐츠 -->
+    <div class="main-layout">
+      <!-- 좌 사이드바 - 버전 목록 -->
+      <aside class="version-sidebar">
+        <div class="vs-head">
+          <div class="vs-title">Releases</div>
+          <div class="vs-sub">버전별 보기</div>
+        </div>
+        <div class="vs-list">
+          <button
+            class="vs-item"
+            :class="{ active: selectedVersion === 'all' }"
+            @click="selectedVersion = 'all'"
+          >
+            <span class="vs-ver">전체</span>
+            <span class="vs-count">{{ projects.length }}</span>
+          </button>
+          <button
+            v-for="v in versionGroups"
+            :key="v.ver"
+            class="vs-item"
+            :class="{ active: selectedVersion === v.ver }"
+            @click="selectedVersion = v.ver"
+          >
+            <span class="vs-ver-wrap">
+              <span class="vs-tag" :class="'vt-' + v.kind">{{ v.kind === 'hotfix' ? 'HF' : 'v' }}</span>
+              <span class="vs-ver">{{ v.ver }}</span>
+            </span>
+            <span class="vs-count">{{ v.items.length }}</span>
+          </button>
+          <div v-if="versionGroups.length === 0 && projects.length > 0" class="vs-empty">
+            버전 태그가 포함된 프로젝트가 없어요
+          </div>
+        </div>
+      </aside>
 
     <div class="list-card">
       <!-- 헤더 -->
@@ -142,6 +169,7 @@
         </div>
       </div>
     </div>
+    </div>
   </div>
 </template>
 
@@ -162,15 +190,44 @@ export default {
       activeMenuId: null,
       selected: [],
       isSelectMode: false,
+      selectedVersion: 'all',
     }
   },
   computed: {
+    // 프로젝트명에서 버전 태그 추출 (예: "v2.4.0 소셜 로그인" -> "v2.4.0")
+    versionGroups() {
+      const map = new Map()
+      for (const p of this.projects) {
+        const name = p.name || ''
+        const m = name.match(/v\d+\.\d+\.\d+/i)
+        if (!m) continue
+        const ver = m[0].toLowerCase()
+        const isHotfix = /hotfix/i.test(name)
+        if (!map.has(ver)) {
+          map.set(ver, { ver, kind: isHotfix ? 'hotfix' : 'release', items: [] })
+        }
+        map.get(ver).items.push(p)
+      }
+      // 버전 내림차순 (최신이 위)
+      return Array.from(map.values()).sort((a, b) => {
+        const parse = (v) => v.replace(/^v/i, '').split('.').map(Number)
+        const [a1,a2,a3] = parse(a.ver)
+        const [b1,b2,b3] = parse(b.ver)
+        return (b1-a1) || (b2-a2) || (b3-a3)
+      })
+    },
     filtered() {
       const q = this.search.toLowerCase()
       return this.projects.filter(p => {
         const matchSearch = !q || p.name.toLowerCase().includes(q) || (p.pm||'').toLowerCase().includes(q)
         const matchStatus = !this.statusFilter || p.status === this.statusFilter
-        return matchSearch && matchStatus
+        // 버전 필터
+        let matchVersion = true
+        if (this.selectedVersion !== 'all') {
+          const m = (p.name || '').match(/v\d+\.\d+\.\d+/i)
+          matchVersion = m && m[0].toLowerCase() === this.selectedVersion
+        }
+        return matchSearch && matchStatus && matchVersion
       })
     },
     sorted() {
@@ -186,9 +243,10 @@ export default {
     allSelected(){ return this.paged.length > 0 && this.paged.every(p => this.selected.includes(p.id)) },
   },
   watch: {
-    search()      { this.page = 1 },
-    statusFilter(){ this.page = 1 },
-    sortKey()     { this.page = 1 },
+    search()         { this.page = 1 },
+    statusFilter()   { this.page = 1 },
+    sortKey()        { this.page = 1 },
+    selectedVersion(){ this.page = 1 },
   },
   mounted()      { document.addEventListener('click', this.closeMenu) },
   beforeUnmount(){ document.removeEventListener('click', this.closeMenu) },
@@ -254,43 +312,107 @@ export default {
 </script>
 
 <style scoped>
-.list-page { padding: 92px 32px 24px; max-width: 1240px; margin: 0 auto }
+.list-page { padding: 92px 32px 24px; max-width: 1280px; margin: 0 auto }
 
 /* 페이지 소개 섹션 */
-.page-intro { margin-bottom: 28px; padding: 0 4px }
+.page-intro { margin-bottom: 24px; padding: 0 4px }
 .intro-eyebrow {
   display: inline-block;
   font-size: 12px; font-weight: 700;
   color: #0064FF; letter-spacing: .12em;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 .intro-title {
-  font-size: 30px; font-weight: 800;
-  line-height: 1.25; letter-spacing: -.03em;
-  color: #0F172A; margin: 0 0 14px;
-  word-break: keep-all;
+  font-size: 26px; font-weight: 800;
+  line-height: 1.2; letter-spacing: -.03em;
+  color: #0F172A; margin: 0 0 8px;
 }
 .intro-sub {
-  font-size: 14px; line-height: 1.7;
-  color: #475569; margin: 0 0 18px;
-  max-width: 720px; word-break: keep-all;
+  font-size: 13.5px; line-height: 1.6;
+  color: #64748B; margin: 0;
 }
-.intro-features {
-  display: flex; flex-wrap: wrap; gap: 8px;
+
+/* 메인 레이아웃: 사이드바 + 콘텐츠 */
+.main-layout {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 20px;
+  align-items: flex-start;
 }
-.feat-chip {
-  display: inline-flex; align-items: center;
-  background: #F1F5F9; color: #475569;
-  padding: 7px 12px; border-radius: 100px;
-  font-size: 12px; font-weight: 500;
-  border: 1px solid #E2E8F0;
+
+/* 좌측 사이드바 — 버전 릴리즈 */
+.version-sidebar {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  position: sticky;
+  top: 90px;
 }
-.feat-chip b {
-  font-weight: 700; color: #0F172A; margin-right: 6px;
+.vs-head {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
 }
+.vs-title {
+  font-size: 14px; font-weight: 700;
+  color: #0F172A; letter-spacing: -0.01em;
+}
+.vs-sub {
+  font-size: 11px; color: #94A3B8;
+  margin-top: 2px;
+}
+.vs-list {
+  padding: 6px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.vs-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 9px 10px;
+  background: transparent; border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  color: #334155;
+  transition: all .12s;
+  text-align: left;
+}
+.vs-item:hover { background: #F1F5F9 }
+.vs-item.active { background: #EFF6FF; color: #0064FF; font-weight: 700 }
+.vs-ver-wrap { display: inline-flex; align-items: center; gap: 7px }
+.vs-tag {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; font-weight: 800;
+  padding: 2px 5px; border-radius: 3px;
+  letter-spacing: 0.02em;
+}
+.vt-release { background: #DBEAFE; color: #1E40AF }
+.vt-hotfix  { background: #FEE2E2; color: #991B1B }
+.vs-item.active .vt-release { background: #BFDBFE }
+.vs-ver { font-family: 'JetBrains Mono', monospace; font-weight: 600 }
+.vs-count {
+  font-size: 11px; font-weight: 700;
+  background: #F1F5F9; color: #64748B;
+  padding: 2px 8px; border-radius: 100px;
+  font-family: 'JetBrains Mono', monospace;
+}
+.vs-item.active .vs-count { background: #BFDBFE; color: #0064FF }
+.vs-empty {
+  padding: 16px 10px;
+  font-size: 11px; color: #94A3B8;
+  text-align: center; line-height: 1.5;
+}
+
+@media (max-width: 900px) {
+  .main-layout { grid-template-columns: 1fr }
+  .version-sidebar { position: static }
+  .vs-list { flex-direction: row; flex-wrap: wrap; padding: 10px }
+  .vs-item { flex: 0 0 auto }
+}
+
 @media (max-width: 640px) {
-  .intro-title { font-size: 24px }
-  .intro-sub { font-size: 13px }
+  .intro-title { font-size: 22px }
+  .intro-sub { font-size: 12.5px }
 }
 .list-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; overflow: hidden }
 
