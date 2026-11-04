@@ -1,7 +1,9 @@
-const BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
+// VITE_API_URL 끝에 /api 있든 없든 자동으로 보정 (AutomationTest.vue와 규칙 통일)
+const RAW = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+const BASE = RAW.endsWith('/api') ? RAW : RAW + '/api'
 
 // 앱 시작 시 Render 서버 워밍업
-fetch(BASE.replace('/api', '/api/health')).catch(() => {})
+fetch(BASE.replace(/\/api$/, '/api/health')).catch(() => {})
 
 async function http(method, path, body) {
   const opts = { method, headers: { 'Content-Type': 'application/json' } }
