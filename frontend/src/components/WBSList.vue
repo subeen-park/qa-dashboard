@@ -85,7 +85,7 @@
           <input type="checkbox" :checked="allSelected" @change="toggleAll" />
         </div>
         <span style="flex:2" :style="{ marginLeft: isSelectMode ? '0' : '10px' }">프로젝트명</span>
-        <span style="width:100px;text-align:center">담당 PM</span>
+        <span style="width:100px;text-align:center">담당자</span>
         <span style="width:90px;text-align:center">상태</span>
         <span style="width:140px;text-align:center">진행률</span>
         <span style="width:96px;text-align:center">마감일</span>
@@ -122,7 +122,7 @@
           <div class="proj-name">{{ proj.name }}</div>
           <div class="proj-desc">{{ proj.description || '설명 없음' }}</div>
         </div>
-        <!-- 담당 PM -->
+        <!-- 담당자 -->
         <div class="proj-pm" style="width:100px;text-align:center;word-break:break-word;white-space:normal">{{ proj.pm || '-' }}</div>
         <!-- 상태 -->
         <div style="width:90px;display:flex;justify-content:center">
@@ -432,7 +432,7 @@ export default {
 .col-check input { cursor:pointer; width:14px; height:14px; accent-color:var(--amber) }
 
 .col-header { display:flex; align-items:center; padding:10px 20px; border-bottom:1px solid var(--border) }
-.col-header span { font-size:11px; color:var(--muted); font-weight:700; text-transform:uppercase; letter-spacing:.08em }
+.col-header span { font-size:12px; color:var(--muted); font-weight:700; text-transform:uppercase; letter-spacing:.08em }
 
 .proj-row { display:flex; align-items:center; padding:14px 20px; border-bottom:1px solid var(--border); cursor:pointer; transition:background .12s }
 .proj-row:hover { background:var(--bg3) }
@@ -440,10 +440,10 @@ export default {
 .proj-row:last-child { border-bottom:none }
 
 .proj-name-cell { overflow:hidden }
-.proj-name  { font-size:14px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
-.proj-desc  { font-size:12px; color:var(--muted); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
-.proj-pm, .proj-date, .proj-count { font-size:13px; color:var(--muted) }
-.status-badge { padding:3px 8px; border-radius:3px; font-size:11px; font-weight:700; letter-spacing:.04em; text-transform:uppercase }
+.proj-name  { font-size:15px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.proj-desc  { font-size:13px; color:var(--muted); margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.proj-pm, .proj-date, .proj-count { font-size:14px; color:var(--muted) }
+.status-badge { padding:3px 8px; border-radius:3px; font-size:12px; font-weight:700; letter-spacing:.04em; text-transform:uppercase }
 .sb-done    { background:var(--green-dim); color:var(--green) }
 .sb-progress{ background:var(--blue-dim);  color:var(--blue) }
 .sb-risk    { background:var(--yellow-dim);color:var(--yellow) }
@@ -453,7 +453,7 @@ export default {
 .prog-row  { display:flex; align-items:center; gap:7px }
 .prog-wrap { width:64px; flex-shrink:0; height:2px; background:var(--faint); border-radius:2px; overflow:hidden }
 .prog-fill { height:100%; transition:width .3s }
-.prog-text { font-size:11px; font-family:'JetBrains Mono',monospace; color:var(--muted) }
+.prog-text { font-size:12px; font-family:'JetBrains Mono',monospace; color:var(--muted); font-weight:600 }
 
 .action-cell  { text-align:center }
 .menu-wrapper { position:relative; display:inline-block }

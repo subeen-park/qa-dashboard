@@ -447,10 +447,10 @@ export default {
 .tc-row { border-bottom: 1px solid #f1f3f5; transition: background .15s; }
 .tc-row:last-child { border-bottom: none; }
 .tc-row:hover { background: #fafbfc; }
-.tc-id { font-size: 12px; font-weight: 700; color: #0F172A; }
+.tc-id { font-size: 13px; font-weight: 700; color: #0F172A; }
 .tc-title-cell { min-width: 0; }
-.tc-title { font-size: 13px; font-weight: 700; color: #0F172A; margin-bottom: 2px; }
-.tc-desc { font-size: 11px; color: #64748B; line-height: 1.4; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.tc-title { font-size: 14px; font-weight: 700; color: #0F172A; margin-bottom: 3px; }
+.tc-desc { font-size: 12px; color: #64748B; line-height: 1.5; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .tc-actions { display: flex; justify-content: center; }
 .btn-run { background: #0064FF; color: #fff; border: none; padding: 7px 14px; border-radius: 7px; font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit; }
 .btn-run:hover:not(:disabled) { background: #0051d3; }
@@ -471,11 +471,11 @@ export default {
 .hist-table { border-top: 1px solid #f1f3f5; }
 .hist-head, .hist-row { display: grid; grid-template-columns: 70px 2fr 85px 60px 100px 55px; gap: 12px; padding: 10px 20px; align-items: center; }
 .hist-head { background: #f9fafc; border-bottom: 1px solid #E5E8EB; font-size: 10px; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: .05em; }
-.hist-row { border-bottom: 1px solid #f1f3f5; font-size: 12px; }
+.hist-row { border-bottom: 1px solid #f1f3f5; font-size: 13px; }
 .hist-row:last-child { border-bottom: none; }
-.hist-tc-id { font-size: 10px; color: #64748B; }
-.hist-tc-title { font-size: 12px; color: #0F172A; font-weight: 600; }
-.hist-time { font-size: 10px; color: #64748B; }
+.hist-tc-id { font-size: 11px; color: #64748B; }
+.hist-tc-title { font-size: 13px; color: #0F172A; font-weight: 600; }
+.hist-time { font-size: 11px; color: #64748B; }
 .status-chip { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; }
 .st-pass { background: #DCFCE7; color: #166534; }
 .st-fail { background: #FEE2E2; color: #991B1B; }
@@ -485,7 +485,7 @@ export default {
 .btn-detail { background: #f6f7f9; border: 1px solid #E5E8EB; padding: 4px 9px; border-radius: 5px; font-size: 11px; cursor: pointer; font-family: inherit; color: #334155; }
 .btn-detail:hover { background: #eef0f3; }
 
-.empty-state { padding: 48px 20px; text-align: center; color: #64748B; font-size: 13px; border-top: 1px solid #f1f3f5; }
+.empty-state { padding: 48px 20px; text-align: center; color: #64748B; font-size: 14px; border-top: 1px solid #f1f3f5; }
 .es-sub { font-size: 11px; margin-top: 6px; color: #94A3B8; }
 
 /* Right panel */

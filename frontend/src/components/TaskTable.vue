@@ -338,11 +338,11 @@ export default {
 .wbs-table tr:last-child td { border-bottom:none }
 
 /* 공통 셀 폰트 — 담당자 기준으로 통일 */
-.cell-text { font-size:13px; font-weight:400; font-family:inherit }
-.cell-date { font-size:13px; font-weight:500; font-family:'JetBrains Mono',monospace; white-space:nowrap; color:var(--text-sub) }
+.cell-text { font-size:14px; font-weight:400; font-family:inherit }
+.cell-date { font-size:14px; font-weight:500; font-family:'JetBrains Mono',monospace; white-space:nowrap; color:var(--text-sub) }
 
 .task-name-cell { display:flex; align-items:center; gap:6px; overflow:hidden }
-.task-name  { font-size:13px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; min-width:0 }
+.task-name  { font-size:14px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; min-width:0 }
 .overdue-chip {
   flex-shrink:0;
   display:inline-flex; align-items:center;
@@ -355,11 +355,11 @@ export default {
 .muted     { color:var(--muted) }
 
 /* 마감일 색상 (톤 다운) */
-.date-over  { color:#DC2626 !important; font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:600 }
-.date-today { color:#D97706 !important; font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:600 }
-.date-soon  { color:#2563EB !important; font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:600 }
+.date-over  { color:#DC2626 !important; font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:600 }
+.date-today { color:#D97706 !important; font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:600 }
+.date-soon  { color:#2563EB !important; font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:600 }
 
-.jira-link { color:var(--blue); text-decoration:none; font-size:13px; font-weight:500 }
+.jira-link { color:var(--blue); text-decoration:none; font-size:14px; font-weight:500 }
 .jira-link:hover { text-decoration:underline }
 
 .prog-row  { display:flex; align-items:center; gap:8px }

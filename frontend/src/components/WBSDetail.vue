@@ -451,13 +451,13 @@ export default {
 
 <style scoped>
 .detail-bar { background:var(--bg2); border-bottom:1px solid var(--border); padding:14px 24px; display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:68px }
-.breadcrumb { display:flex; align-items:center; gap:10px; font-size:14px }
+.breadcrumb { display:flex; align-items:center; gap:10px; font-size:15px }
 .bc-link    { color:var(--amber); cursor:pointer }.bc-link:hover{ text-decoration:underline }
 .bc-sep     { color:var(--faint) }
 .bc-cur     { color:var(--text); font-weight:600 }
 .bar-right  { display:flex; align-items:center; gap:10px }
 .inner-search{ display:flex; align-items:center; gap:8px; background:var(--bg3); border:1px solid var(--border2); border-radius:8px; padding:7px 12px }
-.inner-search input{ background:transparent; border:none; outline:none; color:var(--text); font-size:13px; width:180px; font-family:inherit }
+.inner-search input{ background:transparent; border:none; outline:none; color:var(--text); font-size:14px; width:180px; font-family:inherit }
 .inner-search input::placeholder{ color:var(--muted) }
 .detail-body{ padding:20px 24px }
 
@@ -476,12 +476,12 @@ export default {
 .tab  { padding:8px 20px; border-radius:8px; cursor:pointer; font-size:14px; color:var(--muted); transition:all .15s; font-weight:500 }
 .tab.on { background:var(--bg4); color:var(--text) }
 
-.btn        { display:inline-flex; align-items:center; gap:6px; padding:7px 14px; border-radius:7px; font-size:13px; font-family:inherit; cursor:pointer; border:none; font-weight:500; transition:all .15s }
+.btn        { display:inline-flex; align-items:center; gap:6px; padding:7px 14px; border-radius:7px; font-size:14px; font-family:inherit; cursor:pointer; border:none; font-weight:500; transition:all .15s }
 .btn-primary{ background:var(--amber); color:#0a0800 }.btn-primary:hover{ background:#f0b85a }
 .btn-ghost  { background:transparent; color:var(--muted); border:1px solid var(--border2) }.btn-ghost:hover{ background:var(--bg3); color:var(--text) }
 .btn-danger { background:var(--red); color:#fff }.btn-danger:hover{ opacity:.85 }
 .btn-danger-ghost { background:transparent; color:var(--red); border:1px solid var(--red) }.btn-danger-ghost:hover{ background:var(--red-dim) }
-.btn-sm     { padding:6px 12px; font-size:12px }
+.btn-sm     { padding:6px 12px; font-size:13px }
 .btn:disabled{ opacity:.5; cursor:not-allowed }
 
 .upload-wrap { position:relative }

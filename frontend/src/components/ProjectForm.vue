@@ -17,7 +17,7 @@
 
       <div class="row2">
         <div class="field">
-          <label>담당 PM *</label>
+          <label>담당자 *</label>
           <input v-model="form.pm" placeholder="예: 박수빈" :class="{error: errors.pm}" />
           <span v-if="errors.pm" class="err-msg">{{ errors.pm }}</span>
         </div>
@@ -63,7 +63,7 @@ export default {
       if (!this.form.name.trim())        e.name = '프로젝트명을 입력하세요'
       if (this.form.name.length > 35)    e.name = '35자 이내로 입력하세요'
       if (!this.form.description.trim()) e.description = '설명을 입력하세요'
-      if (!this.form.pm.trim())          e.pm = '담당 PM을 입력하세요'
+      if (!this.form.pm.trim())          e.pm = '담당자를 입력하세요'
       if (!this.form.endDate)            e.endDate = '마감일을 선택하세요'
       this.errors = e
       return Object.keys(e).length === 0
