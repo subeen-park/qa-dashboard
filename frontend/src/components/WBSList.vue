@@ -1,5 +1,21 @@
 <template>
   <div class="list-page">
+    <!-- 페이지 설명 -->
+    <div class="page-intro">
+      <div class="intro-eyebrow">TEST PLAN</div>
+      <h1 class="intro-title">리스크 기반 TC 설계와<br>진행 추적 콘솔</h1>
+      <p class="intro-sub">
+        QA 프로젝트별 WBS(Work Breakdown Structure)로 Smoke · Regression · E2E 카테고리를 관리하고,
+        담당자별 진행률과 지연 리스크를 실시간 추적합니다.
+      </p>
+      <div class="intro-features">
+        <span class="feat-chip"><b>프로젝트 CRUD</b> · 생성 · 수정 · 삭제</span>
+        <span class="feat-chip"><b>태스크 WBS</b> · 그룹별 분류 · 담당자 배정</span>
+        <span class="feat-chip"><b>진행률 추적</b> · 간트 차트 · 지연 플래그</span>
+        <span class="feat-chip"><b>엑셀 업로드</b> · 대량 TC 일괄 등록</span>
+      </div>
+    </div>
+
     <div class="list-card">
       <!-- 헤더 -->
       <div class="list-header">
@@ -238,7 +254,44 @@ export default {
 </script>
 
 <style scoped>
-.list-page { padding: 92px 32px 24px }
+.list-page { padding: 92px 32px 24px; max-width: 1240px; margin: 0 auto }
+
+/* 페이지 소개 섹션 */
+.page-intro { margin-bottom: 28px; padding: 0 4px }
+.intro-eyebrow {
+  display: inline-block;
+  font-size: 12px; font-weight: 700;
+  color: #0064FF; letter-spacing: .12em;
+  margin-bottom: 12px;
+}
+.intro-title {
+  font-size: 30px; font-weight: 800;
+  line-height: 1.25; letter-spacing: -.03em;
+  color: #0F172A; margin: 0 0 14px;
+  word-break: keep-all;
+}
+.intro-sub {
+  font-size: 14px; line-height: 1.7;
+  color: #475569; margin: 0 0 18px;
+  max-width: 720px; word-break: keep-all;
+}
+.intro-features {
+  display: flex; flex-wrap: wrap; gap: 8px;
+}
+.feat-chip {
+  display: inline-flex; align-items: center;
+  background: #F1F5F9; color: #475569;
+  padding: 7px 12px; border-radius: 100px;
+  font-size: 12px; font-weight: 500;
+  border: 1px solid #E2E8F0;
+}
+.feat-chip b {
+  font-weight: 700; color: #0F172A; margin-right: 6px;
+}
+@media (max-width: 640px) {
+  .intro-title { font-size: 24px }
+  .intro-sub { font-size: 13px }
+}
 .list-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; overflow: hidden }
 
 .list-header { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 20px; border-bottom:1px solid var(--border); flex-wrap:wrap }
