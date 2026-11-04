@@ -465,7 +465,7 @@ export default {
 .mc       { background:var(--bg2); border:1px solid var(--border); border-radius:10px; padding:16px 20px }
 .mc-label { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:6px; display:flex; align-items:center; gap:6px }
 .mc-hint  { font-size:10px; color:var(--muted); font-weight:400; text-transform:none; letter-spacing:0 }
-.mc-val   { font-size:26px; font-family:'DM Mono',monospace; font-weight:600 }
+.mc-val   { font-size:26px; font-family:'JetBrains Mono',monospace; font-weight:700; letter-spacing:-0.02em }
 .mc-sub   { font-size:11px; color:var(--muted); margin-top:4px }
 .mc-arrow { font-size:11px }
 .mc-clickable { cursor:pointer; transition:all .15s; user-select:none }
@@ -517,7 +517,7 @@ export default {
 .bulk-name  { font-size:13px; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
 .bulk-control { display:flex; align-items:center; gap:8px; flex-shrink:0 }
 .bulk-slider{ width:100px; accent-color:var(--amber) }
-.bulk-val   { font-size:12px; font-family:'DM Mono',monospace; color:var(--text); width:36px; text-align:right }
+.bulk-val   { font-size:12px; font-family:'JetBrains Mono',monospace; color:var(--text); width:36px; text-align:right }
 .bulk-select{ background:var(--bg2); border:1px solid var(--border2); border-radius:5px; padding:3px 6px; color:var(--text); font-size:12px; outline:none }
 
 /* 스티키 상태 네비게이터 */

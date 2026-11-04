@@ -249,8 +249,8 @@ export default {
 .search-input::placeholder{ color:var(--muted) }
 .clear-btn   { background:none; border:none; color:var(--muted); cursor:pointer; font-size:13px }
 .header-right{ display:flex; align-items:center; gap:8px; flex-wrap:wrap }
-.count-label { font-size:13px; color:var(--muted); font-family:'DM Mono',monospace }
-.sel-count   { font-size:13px; font-weight:600; color:var(--amber); font-family:'DM Mono',monospace }
+.count-label { font-size:13px; color:var(--muted); font-family:'JetBrains Mono',monospace }
+.sel-count   { font-size:13px; font-weight:600; color:var(--amber); font-family:'JetBrains Mono',monospace }
 .filter-select{ background:transparent; border:1px solid var(--border2); border-radius:6px; padding:6px 10px; color:var(--text); font-size:13px; outline:none; cursor:pointer; font-family:inherit }
 
 .col-check { width:40px; flex-shrink:0; display:flex; align-items:center; justify-content:center }
@@ -278,7 +278,7 @@ export default {
 .prog-row  { display:flex; align-items:center; gap:7px }
 .prog-wrap { width:64px; flex-shrink:0; height:2px; background:var(--faint); border-radius:2px; overflow:hidden }
 .prog-fill { height:100%; transition:width .3s }
-.prog-text { font-size:11px; font-family:'DM Mono',monospace; color:var(--muted) }
+.prog-text { font-size:11px; font-family:'JetBrains Mono',monospace; color:var(--muted) }
 
 .action-cell  { text-align:center }
 .menu-wrapper { position:relative; display:inline-block }
@@ -297,7 +297,7 @@ export default {
 .icon-btn{ background:none; border:none; cursor:pointer; display:flex; align-items:center }
 
 .pagination { display:flex; align-items:center; justify-content:space-between; padding:10px 20px; border-top:1px solid var(--border) }
-.pg-info { font-size:11px; color:var(--muted); font-family:'DM Mono',monospace }
+.pg-info { font-size:11px; color:var(--muted); font-family:'JetBrains Mono',monospace }
 .pg-btns { display:flex; gap:3px }
 .pg-btn  { padding:4px 10px; border-radius:5px; border:1px solid var(--border); background:transparent; color:var(--muted); font-size:11px; cursor:pointer; font-family:inherit; transition:all .12s }
 .pg-btn:disabled { opacity:.3; cursor:default }
