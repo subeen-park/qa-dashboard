@@ -20,10 +20,6 @@
           <div class="gnb-item" :class="{active: view==='home'}" @click="goHome">홈</div>
           <div class="gnb-item" :class="{active: view==='list' || view==='detail'}" @click="goList">테스트 플랜</div>
           <div class="gnb-item" :class="{active: view==='automation'}" @click="goPage('automation')">자동화 테스트</div>
-          <div class="gnb-item" :class="{active: view==='farm'}" @click="goPage('farm')">디바이스팜</div>
-          <div class="gnb-item" :class="{active: view==='cicd'}" @click="goPage('cicd')">CI/CD</div>
-          <div class="gnb-item" :class="{active: view==='defect'}" @click="goPage('defect')">결함 트래커</div>
-          <div class="gnb-item" :class="{active: view==='quality'}" @click="goPage('quality')">품질 대시보드</div>
         </nav>
         <div class="gnb-right">
           <a href="https://github.com/subeen-park/qa-dashboard" target="_blank" class="icon-btn" title="GitHub">
@@ -53,15 +49,14 @@
               QA Engineering Platform
             </div>
             <h1 class="hero-title">
-              <span class="line">서비스 품질을</span>
+              <span class="line">테스트를</span>
               <span class="line">
-                <span class="grad">하나의 흐름</span>으로.
+                <span class="grad">직접 돌리는</span> QA 콘솔.
               </span>
             </h1>
             <p class="hero-desc">
-              테스트 플랜 수립부터 자동화 실행, 디바이스 자동 검증,<br>
-              CI/CD 파이프라인, 결함 트래킹, 품질 지표 분석까지 —<br>
-              QA 엔지니어링의 모든 과정을 한 곳에서 관리하세요.
+              Playwright 기반 자동화 엔진으로 TC를 실시간 실행하고,<br>
+              스크린샷·로그·결과를 한 화면에서 추적합니다.
             </p>
             <div class="hero-cta">
               <button class="btn btn-primary btn-lg" @click="goPage('automation')">
@@ -73,15 +68,13 @@
             <div class="hero-trusted">
               <div class="trusted-label">Powered by</div>
               <div class="trusted-logos">
-                <span>Selenium</span>
+                <span>Playwright</span>
                 <span class="sep">·</span>
-                <span>Appium</span>
+                <span>Vue 3</span>
                 <span class="sep">·</span>
-                <span>Postman</span>
+                <span>Flask</span>
                 <span class="sep">·</span>
-                <span>Jira</span>
-                <span class="sep">·</span>
-                <span>GitLab</span>
+                <span>PostgreSQL</span>
               </div>
             </div>
           </div>
@@ -189,12 +182,12 @@
         <div class="section-inner">
           <div class="section-eyebrow">업무 흐름</div>
           <h2 class="section-title">
-            설계부터 지표까지,<br>
-            <span class="grad">끊김 없는 QA 사이클</span>
+            설계하고,<br>
+            <span class="grad">바로 실행합니다.</span>
           </h2>
-          <p class="section-sub">QA 엔지니어의 실제 업무 흐름을 그대로 녹여낸 4단계 구조</p>
+          <p class="section-sub">TC를 작성하고 Playwright 엔진으로 실시간 돌려봅니다 — 결과는 DB에 영구 보존</p>
 
-          <div class="flow-grid">
+          <div class="flow-grid flow-grid-2">
             <div class="flow-card flow-01" @click="goList">
               <div class="fc-top">
                 <div class="fc-num">01</div>
@@ -211,100 +204,48 @@
                 <div class="fc-num">02</div>
                 <div class="fc-tag tag-auto">AUTO</div>
               </div>
-              <h3 class="fc-title">자동화 테스트</h3>
-              <p class="fc-desc">PC·모바일·API·부하 테스트 통합 실행. Selenium/Appium/Postman/JMeter 스크립트를 한 곳에서.</p>
+              <h3 class="fc-title">자동화 테스트 <span class="live-pill">LIVE</span></h3>
+              <p class="fc-desc">Playwright 기반 자동화 엔진 — TC를 UI에서 실행하면 백엔드가 백그라운드로 Chromium을 돌리고, 500ms 폴링으로 스크린샷을 실시간 표시합니다.</p>
               <div class="fc-foot">
-                <span class="fc-link">바로 가기 →</span>
-              </div>
-            </div>
-            <div class="flow-card flow-03" @click="goPage('farm')">
-              <div class="fc-top">
-                <div class="fc-num">03</div>
-                <div class="fc-tag tag-device">DEVICE</div>
-              </div>
-              <h3 class="fc-title">디바이스팜</h3>
-              <p class="fc-desc">iPhone·Pixel·Galaxy·iPad 7대 상시 연결. 미러링 뷰로 실시간 테스트 상황 확인, 배터리·가동 시간 모니터링.</p>
-              <div class="fc-foot">
-                <span class="fc-link">바로 가기 →</span>
-              </div>
-            </div>
-            <div class="flow-card flow-04" @click="goPage('cicd')">
-              <div class="fc-top">
-                <div class="fc-num">04</div>
-                <div class="fc-tag tag-cicd">CI/CD</div>
-              </div>
-              <h3 class="fc-title">CI/CD 파이프라인</h3>
-              <p class="fc-desc">PR 머지 → 자동 빌드 → 디바이스팜 배포 → pytest·Appium 전체 디바이스 병렬 실행 → Slack 자동 리포트.</p>
-              <div class="fc-foot">
-                <span class="fc-link">바로 가기 →</span>
-              </div>
-            </div>
-            <div class="flow-card flow-05" @click="goPage('defect')">
-              <div class="fc-top">
-                <div class="fc-num">05</div>
-                <div class="fc-tag tag-bug">BUG</div>
-              </div>
-              <h3 class="fc-title">결함 트래커</h3>
-              <p class="fc-desc">Jira × GitLab 교차 검증으로 릴리즈 범위 자동 매칭. 탈출/재발 결함 플래그로 품질 리스크 선제 탐지.</p>
-              <div class="fc-foot">
-                <span class="fc-link">바로 가기 →</span>
-              </div>
-            </div>
-            <div class="flow-card flow-06" @click="goPage('quality')">
-              <div class="fc-top">
-                <div class="fc-num">06</div>
-                <div class="fc-tag tag-dash">DASH</div>
-              </div>
-              <h3 class="fc-title">품질 대시보드</h3>
-              <p class="fc-desc">릴리즈별 통과율·결함 밀도·자동화율 추이를 SVG 차트로 시각화. 품질 기준의 정량 관리.</p>
-              <div class="fc-foot">
-                <span class="fc-link">바로 가기 →</span>
+                <span class="fc-link">바로 실행 →</span>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      <!-- Section 4: Tool Integration -->
+      <!-- Section 4: Tech Stack -->
       <section class="section-tools">
         <div class="section-inner">
-          <div class="section-eyebrow">도구 연동</div>
+          <div class="section-eyebrow">기술 스택</div>
           <h2 class="section-title">
-            실무에서 쓰는 모든 도구를<br>
-            <span class="grad">하나의 콘솔</span>로.
+            <span class="grad">직접 설계하고 운영</span>하는<br>
+            자동화 아키텍처.
           </h2>
           <div class="tools-grid">
             <div class="tool-badge">
-              <div class="tb-cat">자동화</div>
-              <div class="tb-name">Selenium</div>
+              <div class="tb-cat">Frontend</div>
+              <div class="tb-name">Vue 3 · Vite</div>
             </div>
             <div class="tool-badge">
-              <div class="tb-cat">모바일</div>
-              <div class="tb-name">Appium</div>
+              <div class="tb-cat">Backend</div>
+              <div class="tb-name">Flask · Python 3.11</div>
             </div>
             <div class="tool-badge">
-              <div class="tb-cat">API</div>
-              <div class="tb-name">Postman</div>
+              <div class="tb-cat">Database</div>
+              <div class="tb-name">PostgreSQL · Supabase</div>
             </div>
             <div class="tool-badge">
-              <div class="tb-cat">부하</div>
-              <div class="tb-name">JMeter · k6</div>
+              <div class="tb-cat">자동화 엔진</div>
+              <div class="tb-name">Playwright · Chromium</div>
             </div>
             <div class="tool-badge">
-              <div class="tb-cat">이슈</div>
-              <div class="tb-name">Jira</div>
-            </div>
-            <div class="tool-badge">
-              <div class="tb-cat">코드</div>
-              <div class="tb-name">GitLab · GitHub</div>
-            </div>
-            <div class="tool-badge">
-              <div class="tb-cat">언어</div>
-              <div class="tb-name">Python · Java · JS · TS</div>
+              <div class="tb-cat">배포</div>
+              <div class="tb-name">Vercel · Render</div>
             </div>
             <div class="tool-badge">
               <div class="tb-cat">모니터링</div>
-              <div class="tb-name">Firebase Crashlytics</div>
+              <div class="tb-name">UptimeRobot</div>
             </div>
           </div>
         </div>
@@ -335,24 +276,24 @@
           <div class="cta-right">
             <div class="cta-stats-grid">
               <div class="cta-stat">
-                <div class="cs-num">4</div>
-                <div class="cs-label">통합 자동화 도구</div>
-                <div class="cs-sub">Selenium · Appium · Postman · JMeter</div>
+                <div class="cs-num">5</div>
+                <div class="cs-label">샘플 TC</div>
+                <div class="cs-sub">로그인 · 결제 · 이미지 깨짐 검증 등</div>
               </div>
               <div class="cta-stat">
-                <div class="cs-num">6</div>
-                <div class="cs-label">QA 업무 영역</div>
-                <div class="cs-sub">플랜 · 자동화 · 디바이스 · CI/CD · 결함 · 지표</div>
+                <div class="cs-num">14</div>
+                <div class="cs-label">최대 스텝 수</div>
+                <div class="cs-sub">결제 End-to-End TC 기준</div>
+              </div>
+              <div class="cta-stat">
+                <div class="cs-num">500<span style="font-size:.5em">ms</span></div>
+                <div class="cs-label">라이브 폴링 주기</div>
+                <div class="cs-sub">실행 중 스크린샷 실시간 표시</div>
               </div>
               <div class="cta-stat">
                 <div class="cs-num">1</div>
-                <div class="cs-label">통합 콘솔</div>
-                <div class="cs-sub">모든 과정을 한 화면에서</div>
-              </div>
-              <div class="cta-stat">
-                <div class="cs-num">∞</div>
-                <div class="cs-label">확장 가능성</div>
-                <div class="cs-sub">Jira · GitLab · GitHub 연동</div>
+                <div class="cs-label">의도된 Fail TC</div>
+                <div class="cs-sub">버그 검출 재현 (TC-005)</div>
               </div>
             </div>
           </div>
@@ -376,16 +317,6 @@
     <w-b-s-detail v-if="view==='detail' && selectedProject" :project="selectedProject" :logs="logs"
       @back="goList" @edit-project="editProj" @toast="showToast" @reload-logs="loadLogs" @refresh-projects="loadProjects" />
     <automation-test v-if="view==='automation'" />
-    <DeviceFarm v-if="view==='farm'" />
-    <CICDPipeline v-if="view==='cicd'" />
-    <defect-cross-check v-if="view==='defect'" />
-    <div v-if="view==='quality'" class="placeholder-page">
-      <div class="ph-inner">
-        <div class="ph-badge">COMING SOON</div>
-        <h2 class="ph-title">품질 대시보드</h2>
-        <p class="ph-desc">릴리즈별 TC 통과율, 결함 밀도, 자동화율 추이를 시각화합니다.</p>
-      </div>
-    </div>
 
     <project-form v-model="showProjectForm" :edit-project="editingProject" @save="saveProject" @delete="deleteProject" />
 
@@ -401,13 +332,15 @@ import WBSList         from './components/WBSList.vue'
 import WBSDetail       from './components/WBSDetail.vue'
 import ProjectForm     from './components/ProjectForm.vue'
 import AutomationTest  from './components/AutomationTest.vue'
-import DefectCrossCheck from './components/DefectCrossCheck.vue'
-import DeviceFarm       from './components/DeviceFarm.vue'
-import CICDPipeline     from './components/CICDPipeline.vue'
+// 아래 세 컴포넌트는 당분간 숨김. 디바이스팜은 실기기 구축 후 별도 포트폴리오로,
+// CI/CD · 결함 트래커는 실 데이터 연동 가능해지면 복원.
+// import DefectCrossCheck from './components/DefectCrossCheck.vue'
+// import DeviceFarm       from './components/DeviceFarm.vue'
+// import CICDPipeline     from './components/CICDPipeline.vue'
 
 export default {
   name: 'App',
-  components: { WBSList, WBSDetail, ProjectForm, AutomationTest, DefectCrossCheck, DeviceFarm, CICDPipeline },
+  components: { WBSList, WBSDetail, ProjectForm, AutomationTest },
   data() {
     return {
       view: 'home',
@@ -492,7 +425,7 @@ export default {
     goPage(p)    { this.view = p; this.selectedProject = null; location.hash = p; window.scrollTo(0, 0) },
     onHashChange() {
       const hash = location.hash.replace('#', '') || 'home'
-      const valid = ['home','list','detail','automation','farm','cicd','defect','quality']
+      const valid = ['home','list','detail','automation']
       if (valid.includes(hash)) {
         if (hash === 'detail' && !this.selectedProject) { this.view = 'list'; location.hash = 'list' }
         else { this.view = hash; if (hash !== 'detail') this.selectedProject = null }
@@ -500,7 +433,7 @@ export default {
     },
     applyHash() {
       const hash = location.hash.replace('#', '') || 'home'
-      const valid = ['home','list','detail','automation','farm','cicd','defect','quality']
+      const valid = ['home','list','detail','automation']
       if (valid.includes(hash) && hash !== 'detail') this.view = hash
       else { this.view = 'home'; location.hash = 'home' }
     },
@@ -810,6 +743,9 @@ body{
 /* Flow */
 .section-flow{padding:120px 0}
 .flow-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.flow-grid-2{grid-template-columns:repeat(2,1fr);max-width:900px;margin:0 auto}
+.live-pill{display:inline-block;background:#10B981;color:#fff;font-size:10px;font-weight:800;letter-spacing:.08em;padding:2px 8px;border-radius:100px;margin-left:8px;vertical-align:middle;animation:livePulse 2s infinite}
+@keyframes livePulse{0%,100%{opacity:1}50%{opacity:.65}}
 .flow-card{
   background:var(--bg2);border:1.5px solid var(--border);border-radius:20px;
   padding:32px 28px;cursor:pointer;transition:all .25s;
