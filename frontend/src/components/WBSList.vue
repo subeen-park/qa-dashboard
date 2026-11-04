@@ -238,7 +238,7 @@ export default {
 </script>
 
 <style scoped>
-.list-page { padding: 24px 32px }
+.list-page { padding: 92px 32px 24px }
 .list-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; overflow: hidden }
 
 .list-header { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 20px; border-bottom:1px solid var(--border); flex-wrap:wrap }

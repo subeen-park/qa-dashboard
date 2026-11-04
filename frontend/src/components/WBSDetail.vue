@@ -450,7 +450,7 @@ export default {
 </script>
 
 <style scoped>
-.detail-bar { background:var(--bg2); border-bottom:1px solid var(--border); padding:14px 24px; display:flex; align-items:center; justify-content:space-between; gap:12px }
+.detail-bar { background:var(--bg2); border-bottom:1px solid var(--border); padding:14px 24px; display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:68px }
 .breadcrumb { display:flex; align-items:center; gap:10px; font-size:14px }
 .bc-link    { color:var(--amber); cursor:pointer }.bc-link:hover{ text-decoration:underline }
 .bc-sep     { color:var(--faint) }
