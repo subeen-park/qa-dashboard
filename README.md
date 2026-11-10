@@ -1,74 +1,103 @@
 # QA Hub
 
-> 서비스 품질을 하나의 흐름으로.
-
-QA 엔지니어링의 전 과정 — **테스트 플랜 → 자동화 실행 → 디바이스팜 → CI/CD → 결함 추적 → 품질 지표** — 을 하나의 콘솔로 통합한 포트폴리오 프로젝트.
+> QA 엔지니어링의 전 과정을 하나의 콘솔로 — **테스트 플랜 → AI TC 생성 → 자동화 실행 → API 테스트 → CI/CD → 결함 추적**
 
 **Live Demo** · [qa-dashboard-flax.vercel.app](https://qa-dashboard-flax.vercel.app)
+**Source** · [GitHub](https://github.com/subeen-park/qa-dashboard)
 
-![QA Hub Preview](./preview.png)
-
-This project is tested with BrowserStack.
+![Preview](./preview.png)
 
 ---
 
 ## 왜 만들었나
 
-QA 업무는 보통 여러 도구에 분산되어 있습니다. 테스트 플랜은 스프레드시트, 자동화는 별도 리포, 결함 추적은 Jira, 코드 변경은 GitLab, 디바이스 검증은 수동, 품질 지표는 수동 집계.
+QA 업무는 여러 도구에 흩어져 있습니다. 테스트 플랜은 스프레드시트, 자동화는 별도 리포, API 테스트는 Postman, 결함 추적은 Jira, 결과 집계는 수동.
 
-**모든 흐름을 하나의 콘솔로 통합하면, QA 엔지니어가 설계 · 실행 · 추적 · 분석에 집중할 수 있다**는 가설에서 시작했습니다.
+**모든 흐름을 하나의 콘솔로 통합하고, AI로 반복 업무를 자동화하면 QA 엔지니어가 설계·분석·전략에 집중할 수 있다** — 가 출발점.
 
 ---
 
-## 주요 기능 (7개 메뉴)
+## 메뉴 구성
 
 ### 1. 홈
-서비스 포지셔닝 + 라이브 메트릭(통과율, 자동화율) 미니 대시보드.
+서비스 포지셔닝 + 자동화 하이라이트 메트릭.
 
-### 2. 테스트 플랜
-리스크 기반 TC 설계, Smoke / Regression / Integration 카테고리 관리, 담당자별 진행률 추적.
+### 2. 테스트 플랜 (WBS)
+프로젝트별 Work Breakdown Structure로 TC 설계·담당자 배정·진행률 추적.
+- 좌측 사이드바에 **Releases 버전별 필터** (GitHub Releases 느낌)
+- 프로젝트 CRUD, Task CRUD
+- 지연 플래그 자동 표시
 
 ### 3. 자동화 테스트 ⭐
 **실제로 돌아가는 Playwright 자동화 엔진.**
 
 - TC는 DB(`testcases` 테이블)에 저장, UI에서 CRUD
-- Run 버튼 → Flask 백엔드가 **백그라운드 스레드**로 Playwright 실행 → saucedemo.com 조작
-- **라이브 스크린샷 500ms 폴링**으로 실행 중인 테스트 실시간 모니터링
-- 각 스텝별 통과/실패 상태 + 실행 시간 + 에러 메시지
+- Run 버튼 → Flask 백엔드가 **백그라운드 스레드**로 Chromium 실행 → saucedemo.com 조작
+- **500ms 스크린샷 폴링**으로 실행 중인 테스트 실시간 모니터링
+- 각 스텝별 통과/실패 상태 + 실행 시간 + 자동 한글 설명
 - 실행 결과는 `test_runs` 테이블에 영구 저장
 
 **샘플 TC 5개**:
 
-| TC | 시나리오 | 예상 |
-|----|---------|------|
-| TC-001 | 로그인 성공 - 유효한 자격증명 | Pass |
-| TC-002 | 로그인 실패 - 잠긴 계정 | Pass (에러 메시지 검증) |
-| TC-003 | 장바구니 상품 추가 - 뱃지 반영 | Pass |
-| TC-004 | 결제 완료 End-to-End (14스텝) | Pass |
-| TC-005 | 이미지 깨짐 검증 (`problem_user`) | **의도된 Fail** |
+| TC | 시나리오 | Level | Domain | 예상 |
+|----|---------|-------|--------|------|
+| TC-001 | 로그인 성공 (유효한 자격증명) | Smoke | 로그인 | Pass |
+| TC-002 | 로그인 실패 (잠긴 계정 에러 검증) | Smoke | 로그인 | Pass |
+| TC-003 | 장바구니 상품 추가 — 뱃지 반영 | Regression | 장바구니 | Pass |
+| TC-004 | 결제 완료 End-to-End (14스텝) | E2E | 결제 | Pass |
+| TC-005 | 이미지 깨짐 검증 (problem_user) | Regression | 이미지 | **의도된 Fail** |
 
-**TC-005가 포트폴리오 하이라이트** — saucedemo의 `problem_user` 계정에 심어진 "상품 이미지 404 치환 버그"를 자동화가 정확히 검출. **QA 자동화의 본질은 통과율이 아니라 결함 검출**임을 증명하는 사례.
+**TC-005 포트폴리오 하이라이트** — saucedemo의 `problem_user` 계정은 **의도적으로 상품 이미지가 깨지도록 설계된 계정**. 자동화가 `[data-test="inventory-item"] img`의 `src` 속성에 `sl-404` 포함을 검증해 결함을 정확히 검출.
 
-### 4. 디바이스팜
-iPhone 14 · 15 Pro · iPad Air · Pixel 7/8 · Galaxy S23/S24 — **7대 디바이스 실시간 상태 모니터링** UI.
-- 디바이스별 미러링 뷰 (Live Preview)
-- 배터리 · 가동 시간 메트릭
-- 실행 중 TC + 진행률
-- 디바이스별 최근 실행 이력
+> **"자동화 TC의 목표는 통과율이 아니라 결함 검출"** 을 증명하는 사례. 통과한 자동화 ≠ 품질 보장.
 
-### 5. CI/CD 파이프라인
-PR 머지 → 빌드 → 디바이스팜 배포 → pytest / Appium 병렬 실행 → Slack 리포트까지 **6단계 파이프라인 시각화**.
+### 4. AI TC 생성 (자동화 메뉴 내 통합) ⭐
+자연어 설명 → Playwright TC JSON → DB 저장 → 즉시 실행.
 
-### 6. 결함 트래커 — Jira × GitLab 교차 검증
-릴리즈 범위 자동 매칭 + 리스크 선제 탐지.
-- `fixVersion` 기준으로 Jira 티켓 수집
-- `release/{version}` 브랜치의 머지된 MR 수집
-- MR 제목 · 브랜치 · 커밋에서 `[A-Z]+-\d+` 패턴으로 Jira 키 추출
-- **매칭 / 누락 / 범위 외 / 상태 불일치** 네 가지로 자동 분류
-- Slack · 이메일 자동 알림
+- **Gemini 2.0 Flash API** 연동 (Google AI Studio 무료 티어)
+- Provider 추상화 (키 없으면 Demo Mode 폴백 → 공개 저장소에서도 작동)
+- 생성된 TC는 **`✦ AI` 뱃지**로 시각적 식별
+- 모달에서 **Level + Domain** 두 축 분류 입력
+- 자연어 → 구조화된 자동화 TC가 되기까지의 E2E 파이프라인
 
-### 7. 품질 대시보드
-릴리즈별 통과율 · 결함 밀도 · 자동화율 추이를 **자체 SVG 차트**로 시각화.
+```
+사용자 입력                    Gemini API              DB + 자동화 엔진
+──────────                   ──────────              ─────────────────
+"로그인 성공 검증"    ───>   JSON TC 생성   ───>    testcases 저장
+URL: saucedemo.com                                   → Run 클릭 → Playwright 실행
+Level: Smoke                                         → 500ms 폴링 스크린샷
+Domain: 로그인                                       → test_runs 저장
+```
+
+### 5. API 테스트 (Phase 2, 예정)
+- Postman Collection v2.1 JSON 업로드 → 순차 실행 → 결과 테이블
+- 상태 코드·응답 시간·바디 Assertion
+- Swagger OpenAPI 스펙 기반 자동 테스트 추가 예정
+
+### 6. CI/CD 파이프라인 (Phase 3, 예정)
+- GitHub Actions 실연동 (`.github/workflows/qa-automation.yml`)
+- 머지 시 자동화 TC 자동 실행 → 결과 리포트
+- 현재는 Demo 뱃지 상태 → 실 연동으로 승격 예정
+
+### 7. 디바이스팜 / 결함 트래커
+설계 완료, 데모 데이터 시연 중. 별도 프로젝트 [Mini Device Farm](../mini-device-farm) 에서 Android 실기기 디바이스팜 PoC 구축.
+
+---
+
+## TC 분류 체계 — 2단 모델
+
+업계 표준 테스트 피라미드(Level)와 비즈니스 도메인(Domain)을 **두 축으로 분리**해서 TC를 분류.
+
+**Level (테스트 티어)**
+- **Smoke** — 핵심 플로우 빠른 확인 (릴리즈 전 필수)
+- **Regression** — 기존 기능 깨짐 없는지 전체 점검
+- **E2E** — 사용자 시나리오 끝에서 끝까지
+
+**Domain (대상 영역)**
+- 로그인 / 결제 / 장바구니 / 이미지 / 알림 / 검색 / 등
+
+한 TC가 두 축으로 분류됨 → 예: `결제 완료 E2E` = Level `E2E`, Domain `결제`.
+상단 Level 탭 필터로 테스트 티어별 그룹 뷰 전환.
 
 ---
 
@@ -80,113 +109,61 @@ PR 머지 → 빌드 → 디바이스팜 배포 → pytest / Appium 병렬 실�
 | Backend | Flask (Python 3.11), psycopg2, python-dotenv |
 | Database | PostgreSQL (Supabase, Tokyo region) |
 | 자동화 엔진 | Playwright (Chromium) |
+| AI | Gemini 2.0 Flash (google-generativeai) |
 | 배포 | Vercel (Frontend), Render (Backend Web Service) |
 | 모니터링 | UptimeRobot (keep-alive, cold start 제거) |
-| 외부 연동 설계 | Jira REST API, GitLab API, GitHub Actions, Appium, Firebase Test Lab |
 
 ---
 
-## 자동화 테스트 아키텍처
+## 아키텍처 (자동화 테스트 + AI 통합)
 
 ```
-┌─────────────────────┐
-│   Frontend (Vue)    │  ← Run 버튼
-└──────────┬──────────┘
-           │ POST /api/testcases/:id/run
-┌──────────▼──────────┐
-│  Flask Backend      │  ← run_id 즉시 반환, 백그라운드 스레드로 실행
-├─────────────────────┤
-│  BaseRunner (abstract)
-│       ├── WebRunner (Playwright, 구현)
-│       └── MobileRunner (Appium, 자리만)
-└──────────┬──────────┘
-           │ 결과 저장
-┌──────────▼──────────┐
-│ PostgreSQL (Supabase)│  testcases + test_runs
-└─────────────────────┘
+┌─────────────────────────────┐
+│  Frontend (Vue 3)            │
+│  - 자동화 테스트 콘솔          │
+│  - AI 생성 모달               │
+│  - Level/Domain 필터          │
+└──────────────┬──────────────┘
+               │ REST
+┌──────────────▼──────────────┐
+│  Backend (Flask)            │
+│  ├─ /api/testcases          │  TC CRUD
+│  ├─ /api/ai/generate-tc     │  자연어 → TC 생성
+│  ├─ /api/ai/health          │  Gemini / Demo 상태
+│  ├─ /api/testcases/:id/run  │  자동화 백그라운드 실행
+│  └─ /api/test-runs/:id      │  결과 조회
+└──────────────┬──────────────┘
+         ┌─────┴──────┐
+         │            │
+┌────────▼────┐  ┌───▼──────────┐
+│ Playwright  │  │ Gemini API   │
+│ (Chromium)  │  │ (2.0 Flash)  │
+└─────┬───────┘  └──────────────┘
+      │
+      ▼
+┌─────────────┐
+│ PostgreSQL  │  testcases + test_runs + projects + tasks
+│ (Supabase)  │
+└─────────────┘
 ```
 
 ### 설계 포인트
 
-**1. `BaseRunner` 추상 클래스로 웹/모바일 러너 통일**
-- 새 러너 추가 = 파일 하나 (`runners/mobile.py`에 Appium 구현)
-- 액션 포맷 통일 (`fill`, `click`, `assert_*`) → TC 하나로 **웹·모바일 둘 다** 돌릴 수 있는 여지
+**1. AI Provider 추상화 (키 없이도 작동)**
+- `GEMINI_API_KEY` 있으면 실제 Gemini 호출
+- 없으면 자동으로 Demo Mode 폴백 (키워드 매칭 샘플 응답)
+- 공개 저장소 fork 한 사람도 바로 실행 가능
 
-**2. 백그라운드 비동기 실행**
-- Run 요청은 즉시 `run_id` 반환, Playwright는 백그라운드 스레드로 실행
+**2. 백그라운드 자동화 실행**
+- Run 요청은 즉시 `run_id` 반환, Playwright는 백그라운드 스레드
 - 창을 닫고 다른 TC도 실행 가능 → 멀티태스킹 UX
 
 **3. TC는 DB(JSONB)에 저장**
-- 파일 1개당 TC 1개면 200개 TC = 200개 파일 → 운영 불가능
-- `steps`를 JSONB로 저장 → UI에서 CRUD, 스케일 걱정 없음
+- 파일 1개당 TC 1개 구조는 200 TC = 200 파일 → 운영 불가능
+- `steps` JSONB 저장 → UI에서 CRUD, 스케일 걱정 없음
 
----
-
-## 환경별 라이브 뷰 전략
-
-| 환경 | 라이브 뷰 방식 | 이유 |
-|------|-------------|------|
-| **공개 데모** (Vercel + Render Free) | Playwright 실행 + 스크린샷 500ms 폴링 | 서버 자원 보호 + 라이브 느낌 유지 |
-| **로컬 개발** | Playwright `headless=False`로 실제 창 | 디버깅 편의 |
-| **사내 환경** (확장 가능성) | Xvfb + noVNC로 서버 Chromium 화면 공유 | 사내망 접근으로 보안 제약 없음, QA 팀 전체가 하나의 자동화 서버 공유 |
-
-### Render Free (512MB RAM) 최적화
-
-- Chromium 런칭 플래그 20개+ (메모리 / CPU 절약)
-- Viewport 1024x576 축소
-- 영상 녹화 비활성화 (환경변수 `RECORD_VIDEO=1`로 로컬에선 켬)
-- `slow_mo` 50ms로 라이브 뷰 가독성 vs 속도 균형
-- UptimeRobot 5분 ping으로 cold start 제거
-
----
-
-## 실무 운영 확장 아키텍처
-
-### 디바이스팜
-- **로컬 저비용**: Android Studio Emulator + Appium
-- **클라우드 무료**: Firebase Test Lab Spark Plan (하루 Android 5대 + iOS 10대 실기기)
-- **엔터프라이즈**: BrowserStack / Sauce Labs / AWS Device Farm 연동
-
-### CI/CD
-GitHub Actions 워크플로우로 PR → 빌드 → 디바이스팜 호출 → Slack 리포트.
-
----
-
-## 프로젝트 구조
-
-```
-qa-dashboard/
-├─ backend/
-│  ├─ app.py                       # Flask 진입점
-│  ├─ db.py                        # DB 커넥션 (python-dotenv)
-│  ├─ migrate.py                   # DB 테이블 생성
-│  ├─ seed_testcases.py            # Seed TC 5개
-│  ├─ requirements.txt
-│  ├─ .env.example
-│  └─ automation/                  # 자동화 테스트 전용
-│     ├─ __init__.py
-│     ├─ __main__.py               # CLI (python -m automation TC-001)
-│     ├─ routes.py                 # Flask Blueprint
-│     ├─ queries.py                # DB 쿼리 레이어
-│     ├─ actions.py                # 액션 매핑
-│     ├─ runners/
-│     │  ├─ base.py                # 공용 추상 러너
-│     │  ├─ web.py                 # Playwright (웹)
-│     │  └─ mobile.py              # Appium (자리만)
-│     └─ output/                   # gitignore
-│
-└─ frontend/
-   └─ src/
-      ├─ App.vue
-      ├─ api/index.js
-      └─ components/
-         ├─ WBSList.vue
-         ├─ WBSDetail.vue
-         ├─ AutomationTest.vue      # 실제 돌아가는 자동화 콘솔
-         ├─ DeviceFarm.vue
-         ├─ CICDPipeline.vue
-         └─ DefectCrossCheck.vue
-```
+**4. 2단 분류 체계**
+- Level × Domain으로 분류해 테스트 전략 관점(피라미드)과 운영 관점(도메인) 둘 다 커버
 
 ---
 
@@ -197,9 +174,11 @@ qa-dashboard/
 cd backend
 pip install -r requirements.txt
 playwright install chromium
-cp .env.example .env         # DATABASE_URL 입력
+cp .env.example .env         # DATABASE_URL + GEMINI_API_KEY (선택) 입력
 python migrate.py            # 테이블 생성
-python seed_testcases.py     # TC 5개 삽입
+python migrate_add_level.py  # Level 컬럼 추가 + 기존 TC 재매핑
+python seed_testcases.py     # Seed TC 5개
+python seed_projects.py      # Seed 프로젝트 5개
 python app.py
 ```
 
@@ -213,22 +192,106 @@ npm run dev
 **CLI로 TC 직접 실행** (디버깅용)
 ```bash
 cd backend
-python -m automation TC-001 --headed    # 실제 창 뜨면서 실행
-python -m automation TC-005 --headed    # 버그 검출 재현
+python -m automation TC-001 --headed    # 실제 창 띄우며 실행
+python -m automation TC-005 --headed    # 이미지 깨짐 결함 검출 재현
 ```
+
+**Gemini API 키 발급** (선택, 없으면 Demo Mode)
+1. https://aistudio.google.com/apikey
+2. Create API key
+3. `.env`에 `GEMINI_API_KEY=발급받은_키` 추가
 
 ---
 
-## 설계 노트
+## 환경별 라이브 뷰 전략
 
-**공개 저장소 데모의 한계**
-Jira · GitLab 실제 토큰은 공개 불가 → 결함 트래커는 **모의 데이터로 UI 시연**. 실제 API 호출 모듈은 설계되어 있으며 `.env`에 토큰만 세팅하면 실 데이터로 전환.
+| 환경 | 라이브 뷰 방식 | 이유 |
+|------|-------------|------|
+| **공개 데모** (Vercel + Render Free) | Playwright 실행 + 500ms 스크린샷 폴링 | 서버 자원 보호 + 라이브 느낌 유지 |
+| **로컬 개발** | Playwright `headless=False`로 실제 창 | 디버깅 편의 |
+| **사내 확장** | Xvfb + noVNC로 서버 Chromium 화면 공유 | 보안 제약 없음, QA 팀 전체 공유 가능 |
 
-**자체 SVG 차트**
-차트 라이브러리 의존성 없이 직접 SVG로. 번들 크기 최소화 + 디자인 완전 제어.
+**Render Free (512MB RAM) 최적화**
+- Chromium 런칭 플래그 20개+ (메모리/CPU 절약)
+- Viewport 1024x576 축소
+- `slow_mo` 50ms로 라이브 뷰 가독성 vs 속도 균형
+- UptimeRobot 5분 ping으로 cold start 제거
 
-**Supabase + Render Free 조합의 이유**
-30일 만료되는 Render PostgreSQL 대신 Supabase 영구 Free 사용 (Tokyo region). Flask 서버는 Render Free Web Service(Oregon). 데이터 지역성과 비용 최적화 사이의 균형.
+---
+
+## 포트폴리오 하이라이트
+
+### 1. 실제 돌아가는 자동화 (데모 아님)
+Playwright가 saucedemo.com을 실시간 조작. TC-005로 **의도된 결함 검출** 사례까지 포함.
+
+### 2. AI Native 설계
+자연어 → 구조화된 자동화 TC → 즉시 실행 E2E 파이프라인.
+Gemini API 뿐 아니라 **Provider 교체 가능한 추상 레이어**로 확장성 확보.
+
+### 3. 2단 분류 체계로 QA 전략 모델링
+테스트 피라미드(Level) × 비즈니스 도메인(Domain)으로 TC를 분류.
+단순 CRUD가 아닌 **QA 테스트 전략 설계** 관점 반영.
+
+### 4. TC 라이프사이클 완전 통합
+생성(AI/수동) → 조회(Level 필터) → 수정 → 삭제 → 실행 → 결과 저장 → 리포트가 **하나의 콘솔**에서 완결.
+
+### 5. "통과율 ≠ 품질" 관점
+TC-005로 자동화의 본질이 결함 검출임을 증명하는 사례를 코드로 구현.
+
+---
+
+## 한계 및 다음 단계
+
+**현재 한계**
+- 단일 호스트 / 단일 브라우저 (Chromium만)
+- 모바일 테스트는 별도 프로젝트([Mini Device Farm](../mini-device-farm))에서 커버
+- API 테스트 메뉴 설계 완료, 구현 예정
+- CI/CD 실연동 설계 완료, GitHub Actions 연결 예정
+
+**다음 단계**
+- Phase 2: Postman Collection v2.1 기반 API 테스트 메뉴
+- Phase 3: GitHub Actions 실연동 (현재 Demo → LIVE 뱃지 승격)
+- 결함 트래커 Jira REST API 실연동 (현재 모의 데이터)
+- AI 기능 확장: "실패한 TC의 원인 분석" / "스펙 문서 → TC 세트 자동 생성"
+
+---
+
+## 프로젝트 구조
+
+```
+qa-dashboard/
+├─ backend/
+│  ├─ app.py                    # Flask 진입점
+│  ├─ db.py                     # DB 커넥션
+│  ├─ migrate.py                # 테이블 생성
+│  ├─ migrate_add_level.py      # Level 컬럼 추가
+│  ├─ seed_testcases.py         # Seed TC 5개
+│  ├─ seed_projects.py          # Seed 프로젝트 5개
+│  ├─ requirements.txt
+│  ├─ .env.example
+│  ├─ ai/                       # AI TC 생성 모듈
+│  │  ├─ __init__.py
+│  │  ├─ generator.py           # Gemini / Demo 폴백
+│  │  └─ routes.py              # /api/ai/*
+│  └─ automation/               # 자동화 테스트 엔진
+│     ├─ routes.py
+│     ├─ queries.py             # DB 쿼리
+│     ├─ actions.py
+│     └─ runners/
+│        ├─ base.py
+│        ├─ web.py              # Playwright
+│        └─ mobile.py           # Appium (설계)
+│
+└─ frontend/
+   └─ src/
+      ├─ App.vue
+      ├─ api/index.js
+      └─ components/
+         ├─ WBSList.vue           # 테스트 플랜 목록
+         ├─ WBSDetail.vue         # 테스트 플랜 상세
+         ├─ AutomationTest.vue    # ⭐ 자동화 + AI 통합
+         └─ ...
+```
 
 ---
 
@@ -242,4 +305,4 @@ MIT License — [LICENSE](./LICENSE)
 
 **박수빈 (Subeen Park)**
 QA Engineer @ SOOP (ex. Nexon Networks)
-[mas_jaypark@naver.com](mailto:mas_jaypark@naver.com) · [@subeen-park](https://github.com/subeen-park)
+[masjaypark@gmail.com](mailto:masjaypark@gmail.com) · [@subeen-park](https://github.com/subeen-park)
