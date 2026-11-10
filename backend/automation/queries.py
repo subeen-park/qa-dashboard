@@ -15,7 +15,7 @@ def list_testcases():
     with get_conn() as conn:
         cur = conn.cursor()
         cur.execute("""
-            SELECT id, title, category, priority, target_url, description,
+            SELECT id, title, level, category, priority, target_url, description,
                    expected_result, steps, note, created_at, updated_at
             FROM testcases
             ORDER BY id
@@ -36,15 +36,16 @@ def create_testcase(data):
         cur = conn.cursor()
         cur.execute("""
             INSERT INTO testcases
-                (id, title, category, priority, target_url, description,
+                (id, title, level, category, priority, target_url, description,
                  expected_result, steps, note)
             VALUES
-                (%(id)s, %(title)s, %(category)s, %(priority)s, %(target_url)s,
+                (%(id)s, %(title)s, %(level)s, %(category)s, %(priority)s, %(target_url)s,
                  %(description)s, %(expected_result)s, %(steps)s, %(note)s)
             RETURNING *
         """, {
             "id":              data["id"],
             "title":           data["title"],
+            "level":           data.get("level", "Smoke"),
             "category":        data.get("category"),
             "priority":        data.get("priority"),
             "target_url":      data["target_url"],
@@ -62,6 +63,7 @@ def update_testcase(tc_id, data):
         cur.execute("""
             UPDATE testcases SET
                 title           = %(title)s,
+                level           = %(level)s,
                 category        = %(category)s,
                 priority        = %(priority)s,
                 target_url      = %(target_url)s,
@@ -75,6 +77,7 @@ def update_testcase(tc_id, data):
         """, {
             "id":              tc_id,
             "title":           data["title"],
+            "level":           data.get("level", "Smoke"),
             "category":        data.get("category"),
             "priority":        data.get("priority"),
             "target_url":      data["target_url"],

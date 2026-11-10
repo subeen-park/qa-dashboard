@@ -45,7 +45,8 @@ PROMPT_TEMPLATE = """당신은 QA 자동화 전문가입니다.
 ## 대상
 - URL: {url}
 - 요청: {description}
-- 카테고리: {category}
+- Level (테스트 티어): {level}
+- Domain (대상 영역): {category}
 
 ## 지원 액션 (steps 배열)
 {actions}
@@ -54,6 +55,7 @@ PROMPT_TEMPLATE = """당신은 QA 자동화 전문가입니다.
 {{
   "title": "TC의 짧은 제목 (한국어)",
   "description": "TC가 검증하는 시나리오 1-2줄",
+  "level": "{level}",
   "category": "{category}",
   "priority": "P1" | "P2" | "P3",
   "expected_result": "pass" | "fail",
@@ -80,7 +82,8 @@ DEMO_SAMPLES = [
         "tc": {
             "title": "로그인 성공 - 유효한 자격증명",
             "description": "유효한 아이디/비밀번호로 로그인 시 메인 페이지로 이동",
-            "category": "Smoke",
+            "level": "Smoke",
+            "category": "로그인",
             "priority": "P1",
             "expected_result": "pass",
             "steps": [
@@ -98,7 +101,8 @@ DEMO_SAMPLES = [
         "tc": {
             "title": "로그인 실패 - 잠긴 계정",
             "description": "잠긴 계정으로 로그인 시 에러 메시지 표시",
-            "category": "Smoke",
+            "level": "Smoke",
+            "category": "로그인",
             "priority": "P1",
             "expected_result": "pass",
             "steps": [
@@ -115,7 +119,8 @@ DEMO_SAMPLES = [
         "tc": {
             "title": "장바구니 상품 추가 - 뱃지 반영",
             "description": "상품을 장바구니에 추가하면 상단 뱃지에 수량 반영",
-            "category": "Regression",
+            "level": "Regression",
+            "category": "장바구니",
             "priority": "P1",
             "expected_result": "pass",
             "steps": [
@@ -133,7 +138,8 @@ DEMO_SAMPLES = [
         "tc": {
             "title": "결제 완료 End-to-End",
             "description": "로그인 → 상품 추가 → 결제 정보 입력 → 주문 완료",
-            "category": "E2E",
+            "level": "E2E",
+            "category": "결제",
             "priority": "P1",
             "expected_result": "pass",
             "steps": [
@@ -158,7 +164,8 @@ DEMO_SAMPLES = [
         "tc": {
             "title": "이미지 깨짐 검증 - problem_user",
             "description": "problem_user 계정에서 상품 이미지가 기본 404 이미지로 치환되는 결함 검출",
-            "category": "Regression",
+            "level": "Regression",
+            "category": "이미지",
             "priority": "P1",
             "expected_result": "fail",
             "steps": [
@@ -175,30 +182,32 @@ DEMO_SAMPLES = [
 
 # ─────────── 메인 API ───────────
 
-def generate_testcase(url: str, description: str, category: str = "Smoke") -> Dict[str, Any]:
+def generate_testcase(url: str, description: str, level: str = "Smoke", category: str = "기타") -> Dict[str, Any]:
     """자연어 → Playwright TC JSON.
 
-    GEMINI_API_KEY 있으면 Gemini 호출, 실패 or 키 없으면 데모 폴백.
+    - level: 테스트 티어 (Smoke / Regression / E2E)
+    - category: 도메인 (로그인/결제/장바구니/이미지/...)
     """
     api_key = os.getenv("GEMINI_API_KEY")
 
     if api_key and GEMINI_AVAILABLE:
         try:
-            tc = _generate_with_gemini(url, description, category, api_key)
+            tc = _generate_with_gemini(url, description, level, category, api_key)
             return tc
         except Exception as e:
             print(f"[AI] Gemini 호출 실패 → 데모 폴백: {e}")
-            return _generate_demo(url, description, category)
-    return _generate_demo(url, description, category)
+            return _generate_demo(url, description, level, category)
+    return _generate_demo(url, description, level, category)
 
 
-def _generate_with_gemini(url: str, description: str, category: str, api_key: str) -> Dict[str, Any]:
+def _generate_with_gemini(url: str, description: str, level: str, category: str, api_key: str) -> Dict[str, Any]:
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel("gemini-2.0-flash")
 
     prompt = PROMPT_TEMPLATE.format(
         url=url,
         description=description,
+        level=level,
         category=category,
         actions=ACTIONS_DOC,
     )
@@ -214,7 +223,7 @@ def _generate_with_gemini(url: str, description: str, category: str, api_key: st
     return data
 
 
-def _generate_demo(url: str, description: str, category: str) -> Dict[str, Any]:
+def _generate_demo(url: str, description: str, level: str, category: str) -> Dict[str, Any]:
     desc_lower = description.lower()
     best_match = None
     best_score = 0
@@ -226,10 +235,12 @@ def _generate_demo(url: str, description: str, category: str) -> Dict[str, Any]:
 
     if best_match and best_score > 0:
         tc = json.loads(json.dumps(best_match["tc"]))  # deep copy
+        # 샘플의 level/category 유지 (매칭된 TC의 원래 분류가 자연스러움)
     else:
         tc = {
             "title": f"[데모] {description[:40]}",
             "description": description,
+            "level": level,
             "category": category,
             "priority": "P2",
             "expected_result": "pass",
@@ -244,6 +255,5 @@ def _generate_demo(url: str, description: str, category: str) -> Dict[str, Any]:
         if step.get("action") == "goto" and step.get("url") == "__URL__":
             step["url"] = url
 
-    tc["category"] = category
     tc["_source"] = "demo"
     return tc

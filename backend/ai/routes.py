@@ -19,7 +19,8 @@ def generate_tc():
     data = request.get_json(silent=True) or {}
     url = (data.get("url") or "").strip()
     description = (data.get("description") or "").strip()
-    category = data.get("category") or "Smoke"
+    level = data.get("level") or "Smoke"
+    category = data.get("category") or "기타"
 
     if not description:
         return jsonify({"error": "자연어 설명을 입력해주세요"}), 400
@@ -27,13 +28,14 @@ def generate_tc():
         return jsonify({"error": "target URL을 입력해주세요"}), 400
 
     try:
-        tc_data = generate_testcase(url, description, category)
+        tc_data = generate_testcase(url, description, level, category)
         source = tc_data.pop("_source", "unknown")
 
         tc_id = f"TC-AI-{uuid.uuid4().hex[:6].upper()}"
         saved = create_testcase({
             "id": tc_id,
             "title": tc_data.get("title", "[AI] 생성 TC"),
+            "level": tc_data.get("level", level),
             "category": tc_data.get("category", category),
             "priority": tc_data.get("priority", "P2"),
             "target_url": url,
