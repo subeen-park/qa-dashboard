@@ -45,10 +45,16 @@
                 <h2 class="sec-title">테스트 케이스</h2>
                 <p class="sec-sub">DB에서 로드. Run 버튼으로 Playwright 러너 즉시 실행.</p>
               </div>
-              <button class="btn-refresh" @click="loadAll" :disabled="loading">
-                <span :class="{spinning: loading}">↻</span>
-                {{ loading ? '로딩' : '새로고침' }}
-              </button>
+              <div class="sec-actions">
+                <button class="btn-ai" @click="showAiModal = true">
+                  <span class="sparkle">✦</span>
+                  AI로 TC 생성
+                </button>
+                <button class="btn-refresh" @click="loadAll" :disabled="loading">
+                  <span :class="{spinning: loading}">↻</span>
+                  {{ loading ? '로딩' : '새로고침' }}
+                </button>
+              </div>
             </div>
             <div class="tc-table" v-if="testcases.length">
               <div class="tc-head">
@@ -229,6 +235,76 @@
       </div>
     </section>
 
+    <!-- AI TC 생성 모달 -->
+    <div v-if="showAiModal" class="ai-overlay" @click.self="closeAiModal">
+      <div class="ai-modal">
+        <div class="ai-head">
+          <div class="ai-head-left">
+            <div class="ai-icon">✦</div>
+            <div>
+              <div class="ai-title">AI로 TC 생성</div>
+              <div class="ai-sub">자연어 요청 → Gemini 2.0 Flash → Playwright TC JSON → 자동 저장</div>
+            </div>
+          </div>
+          <button class="ai-close" @click="closeAiModal">×</button>
+        </div>
+
+        <div class="ai-body">
+          <div class="ai-field">
+            <label>대상 URL</label>
+            <input v-model="aiForm.url" placeholder="https://www.saucedemo.com" />
+          </div>
+          <div class="ai-field">
+            <label>테스트하고 싶은 시나리오 (자연어)</label>
+            <textarea
+              v-model="aiForm.description"
+              rows="4"
+              placeholder="예: 유효한 standard_user 계정으로 로그인한 뒤 백팩 상품을 장바구니에 담아서 뱃지가 1로 뜨는지 검증"
+            ></textarea>
+          </div>
+          <div class="ai-field ai-field-row">
+            <div>
+              <label>카테고리</label>
+              <select v-model="aiForm.category">
+                <option>Smoke</option>
+                <option>Regression</option>
+                <option>E2E</option>
+              </select>
+            </div>
+            <div class="ai-mode-pill" :class="'mode-' + aiMode">
+              <span class="mode-dot"></span>
+              {{ aiMode === 'gemini' ? 'Gemini 2.0 Flash' : 'Demo Mode (키 없음)' }}
+            </div>
+          </div>
+
+          <div v-if="aiError" class="ai-error">{{ aiError }}</div>
+
+          <div v-if="aiResult" class="ai-result">
+            <div class="ai-result-head">
+              <span class="ai-result-badge">생성됨</span>
+              <span class="ai-result-title">{{ aiResult.title }}</span>
+            </div>
+            <div class="ai-result-meta mono">
+              {{ aiResult.id }} · {{ aiResult.category }} · {{ aiResult.priority }} · {{ aiResult.steps.length }} steps
+            </div>
+            <div class="ai-result-note">왼쪽 TC 목록에 추가되었어요. Run 눌러서 바로 실행 가능.</div>
+          </div>
+        </div>
+
+        <div class="ai-foot">
+          <button class="ai-btn ai-btn-ghost" @click="closeAiModal">닫기</button>
+          <button
+            class="ai-btn ai-btn-primary"
+            @click="runAiGenerate"
+            :disabled="aiGenerating || !aiForm.url || !aiForm.description"
+          >
+            <span v-if="aiGenerating" class="ai-spinner"></span>
+            {{ aiGenerating ? '생성 중...' : '✦ 생성' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
   </div>
 </template>
 
@@ -252,6 +328,17 @@ export default {
       screenshotTs: '',
       screenshotLoaded: false,
       confirmDialog: null,
+      // AI 생성 모달
+      showAiModal: false,
+      aiMode: 'demo',
+      aiGenerating: false,
+      aiResult: null,
+      aiError: '',
+      aiForm: {
+        url: 'https://www.saucedemo.com',
+        description: '',
+        category: 'Smoke',
+      },
     }
   },
   computed: {
@@ -280,6 +367,7 @@ export default {
   },
   async mounted() {
     await this.loadAll()
+    await this.checkAiMode()
   },
   beforeUnmount() {
     this.stopPolling()
@@ -384,6 +472,46 @@ export default {
       // 바로 닫음. 백엔드 러너는 백그라운드로 계속 돌아가서 결과 저장됨.
       this.closeRunnerPanel()
     },
+
+    // ───────── AI TC 생성 ─────────
+    async checkAiMode() {
+      try {
+        const res = await fetch(`${API_BASE}/api/ai/health`)
+        if (res.ok) {
+          const data = await res.json()
+          this.aiMode = data.mode || 'demo'
+        }
+      } catch (e) {}
+    },
+    closeAiModal() {
+      this.showAiModal = false
+      this.aiResult = null
+      this.aiError = ''
+    },
+    async runAiGenerate() {
+      this.aiGenerating = true
+      this.aiError = ''
+      this.aiResult = null
+      try {
+        const res = await fetch(`${API_BASE}/api/ai/generate-tc`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url: this.aiForm.url,
+            description: this.aiForm.description,
+            category: this.aiForm.category,
+          }),
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || '생성 실패')
+        this.aiResult = data.testcase
+        await this.loadAll()
+      } catch (e) {
+        this.aiError = e.message
+      } finally {
+        this.aiGenerating = false
+      }
+    },
     closeRunnerPanel() {
       this.stopPolling()
       this.activeRun = null
@@ -436,6 +564,141 @@ export default {
 .sec-sub { font-size: 12px; color: #64748B; margin-top: 2px; }
 .btn-refresh { background: #fff; border: 1px solid #E5E8EB; padding: 7px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; color: #334155; font-family: inherit; display: flex; align-items: center; gap: 6px; }
 .btn-refresh:hover { background: #f6f7f9; }
+
+/* AI 버튼 & 영역 */
+.sec-actions { display: flex; gap: 8px; align-items: center; }
+.btn-ai {
+  background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%);
+  color: #fff; border: none;
+  padding: 7px 14px; border-radius: 8px;
+  font-size: 12px; font-weight: 700;
+  cursor: pointer; font-family: inherit;
+  display: flex; align-items: center; gap: 6px;
+  letter-spacing: -0.01em;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25);
+  transition: all .15s;
+}
+.btn-ai:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35); }
+.btn-ai .sparkle { font-size: 13px; animation: sparkle 2s infinite; }
+@keyframes sparkle {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.15); }
+}
+
+/* AI 모달 */
+.ai-overlay {
+  position: fixed; inset: 0; z-index: 2000;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(6px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px; animation: aiFadeIn .2s;
+}
+@keyframes aiFadeIn { from { opacity: 0 } to { opacity: 1 } }
+.ai-modal {
+  background: #fff; border-radius: 16px;
+  width: 100%; max-width: 560px; max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 25px 60px rgba(0,0,0,.25);
+  animation: aiSlide .25s;
+}
+@keyframes aiSlide { from { opacity: 0; transform: translateY(16px) } to { opacity: 1; transform: translateY(0) } }
+
+.ai-head {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  padding: 22px 24px 18px;
+  border-bottom: 1px solid #F1F5F9;
+}
+.ai-head-left { display: flex; gap: 14px; align-items: flex-start; }
+.ai-icon {
+  width: 44px; height: 44px; border-radius: 12px;
+  background: linear-gradient(135deg, #6366F1, #8B5CF6);
+  color: #fff; display: flex; align-items: center; justify-content: center;
+  font-size: 20px; font-weight: 800; flex-shrink: 0;
+  box-shadow: 0 6px 18px rgba(99, 102, 241, 0.3);
+}
+.ai-title { font-size: 17px; font-weight: 800; color: #0F172A; letter-spacing: -0.02em; margin-bottom: 4px; }
+.ai-sub { font-size: 12px; color: #64748B; line-height: 1.5; }
+.ai-close {
+  background: #F1F5F9; border: none; width: 32px; height: 32px;
+  border-radius: 8px; font-size: 20px; cursor: pointer; color: #64748B;
+  display: flex; align-items: center; justify-content: center;
+}
+.ai-close:hover { background: #E2E8F0; }
+
+.ai-body { padding: 20px 24px; display: flex; flex-direction: column; gap: 14px; }
+.ai-field { display: flex; flex-direction: column; gap: 6px; }
+.ai-field label { font-size: 12px; font-weight: 700; color: #334155; letter-spacing: -0.01em; }
+.ai-field input, .ai-field textarea, .ai-field select {
+  background: #F8FAFC; border: 1px solid #E2E8F0;
+  padding: 10px 12px; border-radius: 8px;
+  font-size: 13px; font-family: inherit; color: #0F172A;
+  outline: none; transition: border-color .15s;
+}
+.ai-field input:focus, .ai-field textarea:focus, .ai-field select:focus { border-color: #6366F1; background: #fff; }
+.ai-field textarea { resize: vertical; min-height: 80px; line-height: 1.5; }
+.ai-field-row { flex-direction: row; justify-content: space-between; align-items: flex-end; gap: 14px; }
+.ai-field-row > div:first-child { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+
+.ai-mode-pill {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 8px 12px; border-radius: 100px;
+  font-size: 11px; font-weight: 700;
+  flex-shrink: 0;
+}
+.mode-gemini { background: #DBEAFE; color: #1E40AF; }
+.mode-demo { background: #FEF3C7; color: #92400E; }
+.mode-dot { width: 6px; height: 6px; border-radius: 50%; }
+.mode-gemini .mode-dot { background: #3B82F6; animation: pulse 2s infinite; }
+.mode-demo .mode-dot { background: #F59E0B; }
+
+.ai-error {
+  background: #FEE2E2; color: #991B1B;
+  padding: 10px 14px; border-radius: 8px;
+  font-size: 12px; border: 1px solid #FCA5A5;
+}
+.ai-result {
+  background: #ECFDF5; border: 1px solid #86EFAC;
+  padding: 14px 16px; border-radius: 10px;
+}
+.ai-result-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.ai-result-badge {
+  background: #10B981; color: #fff;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.06em;
+  padding: 3px 8px; border-radius: 4px;
+}
+.ai-result-title { font-size: 14px; font-weight: 700; color: #065F46; }
+.ai-result-meta { font-size: 11px; color: #047857; margin-bottom: 8px; }
+.ai-result-note { font-size: 12px; color: #065F46; }
+
+.ai-foot {
+  display: flex; justify-content: flex-end; gap: 10px;
+  padding: 16px 24px 20px;
+  border-top: 1px solid #F1F5F9;
+}
+.ai-btn {
+  padding: 10px 18px; border-radius: 9px;
+  font-size: 13px; font-weight: 700;
+  border: none; cursor: pointer; font-family: inherit;
+  display: inline-flex; align-items: center; gap: 7px;
+  transition: all .15s;
+}
+.ai-btn-ghost { background: #F1F5F9; color: #334155; }
+.ai-btn-ghost:hover { background: #E2E8F0; }
+.ai-btn-primary {
+  background: linear-gradient(135deg, #6366F1, #8B5CF6);
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+.ai-btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(99, 102, 241, 0.4); }
+.ai-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.ai-spinner {
+  width: 12px; height: 12px;
+  border: 2px solid rgba(255,255,255,.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
 .spinning { display: inline-block; animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -447,10 +710,10 @@ export default {
 .tc-row { border-bottom: 1px solid #f1f3f5; transition: background .15s; }
 .tc-row:last-child { border-bottom: none; }
 .tc-row:hover { background: #fafbfc; }
-.tc-id { font-size: 13px; font-weight: 700; color: #0F172A; }
+.tc-id { font-size: 12px; font-weight: 700; color: #0F172A; }
 .tc-title-cell { min-width: 0; }
-.tc-title { font-size: 14px; font-weight: 700; color: #0F172A; margin-bottom: 3px; }
-.tc-desc { font-size: 12px; color: #64748B; line-height: 1.5; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.tc-title { font-size: 13px; font-weight: 700; color: #0F172A; margin-bottom: 2px; }
+.tc-desc { font-size: 11px; color: #64748B; line-height: 1.4; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .tc-actions { display: flex; justify-content: center; }
 .btn-run { background: #0064FF; color: #fff; border: none; padding: 7px 14px; border-radius: 7px; font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit; }
 .btn-run:hover:not(:disabled) { background: #0051d3; }
@@ -471,11 +734,11 @@ export default {
 .hist-table { border-top: 1px solid #f1f3f5; }
 .hist-head, .hist-row { display: grid; grid-template-columns: 70px 2fr 85px 60px 100px 55px; gap: 12px; padding: 10px 20px; align-items: center; }
 .hist-head { background: #f9fafc; border-bottom: 1px solid #E5E8EB; font-size: 10px; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: .05em; }
-.hist-row { border-bottom: 1px solid #f1f3f5; font-size: 13px; }
+.hist-row { border-bottom: 1px solid #f1f3f5; font-size: 12px; }
 .hist-row:last-child { border-bottom: none; }
-.hist-tc-id { font-size: 11px; color: #64748B; }
-.hist-tc-title { font-size: 13px; color: #0F172A; font-weight: 600; }
-.hist-time { font-size: 11px; color: #64748B; }
+.hist-tc-id { font-size: 10px; color: #64748B; }
+.hist-tc-title { font-size: 12px; color: #0F172A; font-weight: 600; }
+.hist-time { font-size: 10px; color: #64748B; }
 .status-chip { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; }
 .st-pass { background: #DCFCE7; color: #166534; }
 .st-fail { background: #FEE2E2; color: #991B1B; }
@@ -485,7 +748,7 @@ export default {
 .btn-detail { background: #f6f7f9; border: 1px solid #E5E8EB; padding: 4px 9px; border-radius: 5px; font-size: 11px; cursor: pointer; font-family: inherit; color: #334155; }
 .btn-detail:hover { background: #eef0f3; }
 
-.empty-state { padding: 48px 20px; text-align: center; color: #64748B; font-size: 14px; border-top: 1px solid #f1f3f5; }
+.empty-state { padding: 48px 20px; text-align: center; color: #64748B; font-size: 13px; border-top: 1px solid #f1f3f5; }
 .es-sub { font-size: 11px; margin-top: 6px; color: #94A3B8; }
 
 /* Right panel */

@@ -14,6 +14,9 @@ from automation.routes import automation_bp
 app = Flask(__name__)
 CORS(app)
 
+from ai.routes import ai_bp
+app.register_blueprint(ai_bp)
+
 # 자동화 테스트 Blueprint 등록
 app.register_blueprint(automation_bp)
 
