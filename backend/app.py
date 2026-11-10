@@ -17,6 +17,9 @@ CORS(app)
 from ai.routes import ai_bp
 app.register_blueprint(ai_bp)
 
+from apitests.routes import apitests_bp
+app.register_blueprint(apitests_bp)
+
 # 자동화 테스트 Blueprint 등록
 app.register_blueprint(automation_bp)
 
