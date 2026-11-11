@@ -20,6 +20,7 @@
           <div class="gnb-item" :class="{active: view==='home'}" @click="goHome">홈</div>
           <div class="gnb-item" :class="{active: view==='list' || view==='detail'}" @click="goList">테스트 플랜</div>
           <div class="gnb-item" :class="{active: view==='automation'}" @click="goPage('automation')">자동화 테스트</div>
+          <div class="gnb-item" :class="{active: view==='api'}" @click="goPage('api')">API 테스트</div>
         </nav>
         <div class="gnb-right">
           <a href="https://github.com/subeen-park/qa-dashboard" target="_blank" class="icon-btn" title="GitHub">
@@ -56,7 +57,7 @@
             </h1>
             <p class="hero-desc">
               Playwright 기반 자동화 엔진으로 TC를 실시간 실행하고,<br>
-              스크린샷·로그·결과를 한 화면에서 추적합니다.
+              Postman Collection 으로 API 검증까지 — 모든 결과를 한 화면에서 추적합니다.
             </p>
             <div class="hero-cta">
               <button class="btn btn-primary btn-lg" @click="goPage('automation')">
@@ -185,9 +186,9 @@
             설계하고,<br>
             <span class="grad">바로 실행합니다.</span>
           </h2>
-          <p class="section-sub">TC를 작성하고 Playwright 엔진으로 실시간 돌려봅니다 — 결과는 DB에 영구 보존</p>
+          <p class="section-sub">TC를 작성하고 Playwright·API 로 실시간 돌려봅니다 — 결과는 DB에 영구 보존</p>
 
-          <div class="flow-grid flow-grid-2">
+          <div class="flow-grid flow-grid-3">
             <div class="flow-card flow-01" @click="goList">
               <div class="fc-top">
                 <div class="fc-num">01</div>
@@ -206,6 +207,17 @@
               </div>
               <h3 class="fc-title">자동화 테스트 <span class="live-pill">LIVE</span></h3>
               <p class="fc-desc">Playwright 기반 자동화 엔진 — TC를 UI에서 실행하면 백엔드가 백그라운드로 Chromium을 돌리고, 500ms 폴링으로 스크린샷을 실시간 표시합니다.</p>
+              <div class="fc-foot">
+                <span class="fc-link">바로 실행 →</span>
+              </div>
+            </div>
+            <div class="flow-card flow-03" @click="goPage('api')">
+              <div class="fc-top">
+                <div class="fc-num">03</div>
+                <div class="fc-tag tag-api">API</div>
+              </div>
+              <h3 class="fc-title">API 테스트 <span class="live-pill">NEW</span></h3>
+              <p class="fc-desc">Postman Collection v2.1 JSON 을 업로드하면 순차 실행 — 상태코드·응답시간 Assertion 자동 검증, 실패 요청만 추려 보여줍니다.</p>
               <div class="fc-foot">
                 <span class="fc-link">바로 실행 →</span>
               </div>
@@ -240,6 +252,14 @@
               <div class="tb-name">Playwright · Chromium</div>
             </div>
             <div class="tool-badge">
+              <div class="tb-cat">API 러너</div>
+              <div class="tb-name">Postman Collection · requests</div>
+            </div>
+            <div class="tool-badge">
+              <div class="tb-cat">AI TC 생성</div>
+              <div class="tb-name">Gemini 2.0 Flash</div>
+            </div>
+            <div class="tool-badge">
               <div class="tb-cat">배포</div>
               <div class="tb-name">Vercel · Render</div>
             </div>
@@ -260,7 +280,7 @@
               지금 바로 시작하세요.
             </h2>
             <p class="cta-sub">
-              테스트 플랜부터 자동화 실행까지,<br>
+              테스트 플랜부터 자동화·API 실행까지,<br>
               QA 업무의 전 과정을 한 곳에서 관리합니다.
             </p>
             <div class="cta-actions">
@@ -317,6 +337,7 @@
     <w-b-s-detail v-if="view==='detail' && selectedProject" :project="selectedProject" :logs="logs"
       @back="goList" @edit-project="editProj" @toast="showToast" @reload-logs="loadLogs" @refresh-projects="loadProjects" />
     <automation-test v-if="view==='automation'" />
+    <api-test v-if="view==='api'" />
 
     <project-form v-model="showProjectForm" :edit-project="editingProject" @save="saveProject" @delete="deleteProject" />
 
@@ -332,6 +353,7 @@ import WBSList         from './components/WBSList.vue'
 import WBSDetail       from './components/WBSDetail.vue'
 import ProjectForm     from './components/ProjectForm.vue'
 import AutomationTest  from './components/AutomationTest.vue'
+import ApiTest         from './components/ApiTest.vue'
 // 아래 세 컴포넌트는 당분간 숨김. 디바이스팜은 실기기 구축 후 별도 포트폴리오로,
 // CI/CD · 결함 트래커는 실 데이터 연동 가능해지면 복원.
 // import DefectCrossCheck from './components/DefectCrossCheck.vue'
@@ -340,7 +362,7 @@ import AutomationTest  from './components/AutomationTest.vue'
 
 export default {
   name: 'App',
-  components: { WBSList, WBSDetail, ProjectForm, AutomationTest },
+  components: { WBSList, WBSDetail, ProjectForm, AutomationTest, ApiTest },
   data() {
     return {
       view: 'home',
@@ -425,7 +447,7 @@ export default {
     goPage(p)    { this.view = p; this.selectedProject = null; location.hash = p; window.scrollTo(0, 0) },
     onHashChange() {
       const hash = location.hash.replace('#', '') || 'home'
-      const valid = ['home','list','detail','automation']
+      const valid = ['home','list','detail','automation','api']
       if (valid.includes(hash)) {
         if (hash === 'detail' && !this.selectedProject) { this.view = 'list'; location.hash = 'list' }
         else { this.view = hash; if (hash !== 'detail') this.selectedProject = null }
@@ -433,7 +455,7 @@ export default {
     },
     applyHash() {
       const hash = location.hash.replace('#', '') || 'home'
-      const valid = ['home','list','detail','automation']
+      const valid = ['home','list','detail','automation','api']
       if (valid.includes(hash) && hash !== 'detail') this.view = hash
       else { this.view = 'home'; location.hash = 'home' }
     },
@@ -744,6 +766,7 @@ body{
 .section-flow{padding:120px 0}
 .flow-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
 .flow-grid-2{grid-template-columns:repeat(2,1fr);max-width:900px;margin:0 auto}
+.flow-grid-3{grid-template-columns:repeat(3,1fr);max-width:1240px;margin:0 auto}
 .live-pill{display:inline-block;background:#10B981;color:#fff;font-size:10px;font-weight:800;letter-spacing:.08em;padding:2px 8px;border-radius:100px;margin-left:8px;vertical-align:middle;animation:livePulse 2s infinite}
 @keyframes livePulse{0%,100%{opacity:1}50%{opacity:.65}}
 .flow-card{
@@ -757,6 +780,7 @@ body{
 .fc-tag{font-size:10px;font-weight:800;padding:4px 10px;border-radius:6px;font-family:'JetBrains Mono',monospace;letter-spacing:.08em}
 .tag-plan{background:#e5f0ff;color:#0064FF}
 .tag-auto{background:#fff5db;color:#c48500}
+.tag-api{background:#D1F7F5;color:#0891B2}
 .tag-device{background:#e3f8ec;color:#06C755}
 .tag-cicd{background:#D1F7F5;color:#0891B2}
 .tag-bug{background:#f0ebfd;color:#8B5CF6}
@@ -890,7 +914,7 @@ body{
   .section-title{font-size:36px}
   .numbers-grid{grid-template-columns:repeat(2,1fr)}
   .cta-inner{grid-template-columns:1fr;gap:40px}
-  .flow-grid{grid-template-columns:repeat(2,1fr)}
+  .flow-grid,.flow-grid-3{grid-template-columns:repeat(2,1fr)}
   .tools-grid{grid-template-columns:repeat(2,1fr)}
   .gnb-nav{display:none}
 }
@@ -901,7 +925,7 @@ body{
   .section-title{font-size:28px}
   .cta-title{font-size:32px}
   .section-numbers,.section-flow,.section-tools,.section-cta{padding:72px 0}
-  .numbers-grid,.flow-grid,.tools-grid{grid-template-columns:1fr}
+  .numbers-grid,.flow-grid,.flow-grid-3,.tools-grid{grid-template-columns:1fr}
   .num-val,.lm-val{font-size:36px}
   .gnb-inner{padding:0 20px}
 }
